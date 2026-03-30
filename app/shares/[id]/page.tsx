@@ -454,6 +454,7 @@ export default function ShareDetailPage() {
                 shareId={shareId}
                 versionId={activeVersionId ?? ""}
                 shareKind={share.kind}
+                isGuest={!user}
                 comments={comments}
                 currentPage={pdfCurrentPage}
                 totalPages={pdfTotalPages}
@@ -472,22 +473,22 @@ export default function ShareDetailPage() {
       </div>
 
       {/* Share modal */}
-      {showShareModal && (
+      {share && (
         <ShareModal
+          open={showShareModal}
+          onOpenChange={setShowShareModal}
           share={share}
-          onClose={() => setShowShareModal(false)}
           onUpdated={(updates) => setShare((prev) => prev ? { ...prev, ...updates } as ShareDTO : prev)}
         />
       )}
 
       {/* Upload version modal */}
-      {showUploadModal && (
-        <UploadVersionModal
-          shareId={shareId}
-          onClose={() => setShowUploadModal(false)}
-          onUploaded={() => { fetchShare(); setShowUploadModal(false); }}
-        />
-      )}
+      <UploadVersionModal
+        open={showUploadModal}
+        onOpenChange={setShowUploadModal}
+        shareId={shareId}
+        onUploaded={() => { fetchShare(); }}
+      />
     </AppShell>
   );
 }

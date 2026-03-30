@@ -3,6 +3,18 @@
 import { useState, useRef, FormEvent } from "react";
 import { useRouter } from "next/navigation";
 import AppShell from "@/components/layout/app-shell";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { cn } from "@/lib/utils";
 
 const CODE_EXTENSIONS = [
   { ext: "js", label: "JavaScript" }, { ext: "ts", label: "TypeScript" },
@@ -106,9 +118,6 @@ export default function NewSharePage() {
     }
   }
 
-  const inputClass = "w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg text-sm bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition";
-  const labelClass = "block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1";
-
   const canSubmit = title.trim() && (
     (inputMode === "file" && file) ||
     ((inputMode === "code" || inputMode === "text") && pasteContent.trim())
@@ -117,13 +126,13 @@ export default function NewSharePage() {
   return (
     <AppShell>
       <div className="p-6 max-w-2xl mx-auto">
-        <h1 className="text-2xl font-bold text-gray-900 dark:text-white mb-6">Create New Share</h1>
+        <h1 className="text-2xl font-bold mb-6">Create New Share</h1>
 
         <form onSubmit={handleSubmit} className="space-y-5">
           {/* Input mode tabs */}
-          <div>
-            <label className={labelClass}>Content Source</label>
-            <div className="flex bg-gray-100 dark:bg-gray-800 rounded-lg p-1 gap-1">
+          <div className="space-y-1.5">
+            <Label>Content Source</Label>
+            <div className="flex bg-muted rounded-lg p-1 gap-1">
               {([
                 { mode: "file" as const, label: "Upload File", icon: "📎" },
                 { mode: "code" as const, label: "Paste Code", icon: "💻" },
@@ -133,11 +142,12 @@ export default function NewSharePage() {
                   key={mode}
                   type="button"
                   onClick={() => setInputMode(mode)}
-                  className={`flex-1 py-2 px-3 text-sm rounded-md transition-colors ${
+                  className={cn(
+                    "flex-1 py-1.5 px-3 text-sm rounded-md transition-colors",
                     inputMode === mode
-                      ? "bg-white dark:bg-gray-700 text-gray-900 dark:text-white shadow-sm font-medium"
-                      : "text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300"
-                  }`}
+                      ? "bg-background text-foreground shadow-sm font-medium"
+                      : "text-muted-foreground hover:text-foreground"
+                  )}
                 >
                   {icon} {label}
                 </button>
@@ -147,9 +157,10 @@ export default function NewSharePage() {
 
           {/* File upload */}
           {inputMode === "file" && (
-            <div>
-              <label className={labelClass}>File *</label>
-              <input
+            <div className="space-y-1.5">
+              <Label htmlFor="file-input">File <span className="text-destructive">*</span></Label>
+              <Input
+                id="file-input"
                 ref={fileRef}
                 type="file"
                 onChange={(e) => {
@@ -157,10 +168,10 @@ export default function NewSharePage() {
                   setFile(f);
                   if (f && !title.trim()) setTitle(f.name.replace(/\.[^.]+$/, ""));
                 }}
-                className={inputClass}
+                className="cursor-pointer"
               />
               {file && (
-                <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                <p className="text-xs text-muted-foreground">
                   {file.name} ({(file.size / 1024).toFixed(1)} KB)
                 </p>
               )}
@@ -171,43 +182,42 @@ export default function NewSharePage() {
           {inputMode === "code" && (
             <>
               <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className={labelClass}>Language *</label>
-                  <select
-                    value={pasteExtension}
-                    onChange={(e) => setPasteExtension(e.target.value)}
-                    className={inputClass}
-                  >
-                    {CODE_EXTENSIONS.map((l) => (
-                      <option key={l.ext} value={l.ext}>{l.label} (.{l.ext})</option>
-                    ))}
-                  </select>
+                <div className="space-y-1.5">
+                  <Label>Language <span className="text-destructive">*</span></Label>
+                  <Select value={pasteExtension} onValueChange={(v) => v && setPasteExtension(v)}>
+                    <SelectTrigger className="w-full">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {CODE_EXTENSIONS.map((l) => (
+                        <SelectItem key={l.ext} value={l.ext}>{l.label} (.{l.ext})</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 </div>
-                <div>
-                  <label className={labelClass}>Filename (optional)</label>
-                  <input
-                    type="text"
+                <div className="space-y-1.5">
+                  <Label htmlFor="paste-filename-code">Filename <span className="text-muted-foreground font-normal">— optional</span></Label>
+                  <Input
+                    id="paste-filename-code"
                     value={pasteFilename}
                     onChange={(e) => {
                       setPasteFilename(e.target.value);
-                      if (e.target.value.trim() && !title.trim()) {
-                        setTitle(e.target.value.trim().replace(/\.[^.]+$/, ""));
-                      }
+                      if (e.target.value.trim() && !title.trim()) setTitle(e.target.value.trim().replace(/\.[^.]+$/, ""));
                     }}
                     placeholder={`e.g. main.${pasteExtension}`}
-                    className={inputClass}
                   />
                 </div>
               </div>
-              <div>
-                <label className={labelClass}>Code *</label>
-                <textarea
+              <div className="space-y-1.5">
+                <Label htmlFor="code-content">Code <span className="text-destructive">*</span></Label>
+                <Textarea
+                  id="code-content"
                   value={pasteContent}
                   onChange={(e) => setPasteContent(e.target.value)}
                   rows={12}
                   placeholder="Paste your code here…"
                   spellCheck={false}
-                  className={inputClass + " font-mono text-xs resize-y"}
+                  className="font-mono text-xs resize-y"
                 />
               </div>
             </>
@@ -217,103 +227,98 @@ export default function NewSharePage() {
           {inputMode === "text" && (
             <>
               <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className={labelClass}>Format *</label>
-                  <select
-                    value={pasteExtension}
-                    onChange={(e) => setPasteExtension(e.target.value)}
-                    className={inputClass}
-                  >
-                    {TEXT_EXTENSIONS.map((t) => (
-                      <option key={t.ext} value={t.ext}>{t.label} (.{t.ext})</option>
-                    ))}
-                  </select>
+                <div className="space-y-1.5">
+                  <Label>Format <span className="text-destructive">*</span></Label>
+                  <Select value={pasteExtension} onValueChange={(v) => v && setPasteExtension(v)}>
+                    <SelectTrigger className="w-full">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {TEXT_EXTENSIONS.map((t) => (
+                        <SelectItem key={t.ext} value={t.ext}>{t.label} (.{t.ext})</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 </div>
-                <div>
-                  <label className={labelClass}>Filename (optional)</label>
-                  <input
-                    type="text"
+                <div className="space-y-1.5">
+                  <Label htmlFor="paste-filename-text">Filename <span className="text-muted-foreground font-normal">— optional</span></Label>
+                  <Input
+                    id="paste-filename-text"
                     value={pasteFilename}
                     onChange={(e) => {
                       setPasteFilename(e.target.value);
-                      if (e.target.value.trim() && !title.trim()) {
-                        setTitle(e.target.value.trim().replace(/\.[^.]+$/, ""));
-                      }
+                      if (e.target.value.trim() && !title.trim()) setTitle(e.target.value.trim().replace(/\.[^.]+$/, ""));
                     }}
                     placeholder={`e.g. notes.${pasteExtension}`}
-                    className={inputClass}
                   />
                 </div>
               </div>
-              <div>
-                <label className={labelClass}>Content *</label>
-                <textarea
+              <div className="space-y-1.5">
+                <Label htmlFor="text-content">Content <span className="text-destructive">*</span></Label>
+                <Textarea
+                  id="text-content"
                   value={pasteContent}
                   onChange={(e) => setPasteContent(e.target.value)}
                   rows={12}
                   placeholder="Paste your text content here…"
-                  className={inputClass + " resize-y" + (["json", "yaml", "xml", "toml", "csv", "env", "conf"].includes(pasteExtension) ? " font-mono text-xs" : "")}
+                  className={cn(
+                    "resize-y",
+                    ["json","yaml","xml","toml","csv","env","conf"].includes(pasteExtension) && "font-mono text-xs"
+                  )}
                 />
               </div>
             </>
           )}
 
           {/* Title */}
-          <div>
-            <label className={labelClass}>Title *</label>
-            <input
-              type="text"
+          <div className="space-y-1.5">
+            <Label htmlFor="title">Title <span className="text-destructive">*</span></Label>
+            <Input
+              id="title"
               value={title}
               onChange={(e) => setTitle(e.target.value)}
               required
               maxLength={200}
               placeholder="Share title"
-              className={inputClass}
+              className="h-9"
             />
           </div>
 
           {/* Description */}
-          <div>
-            <label className={labelClass}>Description</label>
-            <textarea
+          <div className="space-y-1.5">
+            <Label htmlFor="description">Description <span className="text-muted-foreground font-normal">— optional</span></Label>
+            <Textarea
+              id="description"
               value={description}
               onChange={(e) => setDescription(e.target.value)}
               rows={2}
               maxLength={2000}
               placeholder="Optional description"
-              className={inputClass + " resize-none"}
+              className="resize-none"
             />
           </div>
 
-          {/* Change note */}
-          <div>
-            <label className={labelClass}>
-              Version note{" "}
-              <span className="text-gray-400 dark:text-gray-500 font-normal">— optional</span>
-            </label>
-            <input
-              type="text"
+          {/* Version note */}
+          <div className="space-y-1.5">
+            <Label htmlFor="change-note">Version note <span className="text-muted-foreground font-normal">— optional</span></Label>
+            <Input
+              id="change-note"
               value={changeNote}
               onChange={(e) => setChangeNote(e.target.value)}
               maxLength={500}
               placeholder="e.g. Initial upload"
-              className={inputClass}
             />
           </div>
 
           {error && (
-            <p className="text-sm text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg px-3 py-2">
+            <p className="text-sm text-destructive bg-destructive/10 border border-destructive/20 rounded-lg px-3 py-2">
               {error}
             </p>
           )}
 
-          <button
-            type="submit"
-            disabled={loading || !canSubmit}
-            className="w-full bg-blue-600 hover:bg-blue-700 disabled:bg-blue-300 dark:disabled:bg-blue-800 text-white font-medium py-2.5 px-4 rounded-lg text-sm transition-colors"
-          >
+          <Button type="submit" disabled={loading || !canSubmit} className="w-full h-9">
             {loading ? "Creating…" : "Create Share"}
-          </button>
+          </Button>
         </form>
       </div>
     </AppShell>

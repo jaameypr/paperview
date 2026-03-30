@@ -46,8 +46,11 @@ export async function getAccessLevel(
     if (collab) return collab.role as AccessLevel;
   }
 
-  // Public shares: viewer access to everyone
+  // Public shares: grant commenter access if comments are enabled
   if (share.visibility === "public") {
+    if (share.commentsEnabled && share.previewMode === "viewer_comments") {
+      return "commenter";
+    }
     return "viewer";
   }
 

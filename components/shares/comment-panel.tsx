@@ -27,10 +27,13 @@ function formatDate(iso: string) {
   });
 }
 
+const GUEST_NAME_KEY = "paperview_guest_name";
+
 interface Props {
   shareId: string;
   versionId: string;
   shareKind: string;
+  isGuest?: boolean;
   comments: CommentType[];
   currentPage?: number;
   totalPages?: number;
@@ -45,7 +48,7 @@ interface Props {
 }
 
 export default function CommentPanel({
-  shareId, versionId, shareKind, comments, currentPage = 1, totalPages = 0,
+  shareId, versionId, shareKind, isGuest = false, comments, currentPage = 1, totalPages = 0,
   activeCommentId, onCommentAdded, onCommentUpdated, onCommentDeleted, onReplyAdded,
   onCommentClick, pendingSelection, onClearSelection,
 }: Props) {
@@ -57,6 +60,10 @@ export default function CommentPanel({
   const [filter, setFilter] = useState<"all" | "open" | "resolved">("all");
   const [pageFilter, setPageFilter] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
+  const [guestName, setGuestName] = useState(() =>
+    typeof window !== "undefined" ? (localStorage.getItem(GUEST_NAME_KEY) ?? "") : ""
+  );
+  const [guestNameError, setGuestNameError] = useState(false);
   const textRef = useRef<HTMLTextAreaElement>(null);
 
   const isPdf = shareKind === "pdf";
@@ -83,7 +90,11 @@ export default function CommentPanel({
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
     if (!text.trim()) return;
+    if (isGuest && !guestName.trim()) { setGuestNameError(true); return; }
+    setGuestNameError(false);
     setLoading(true);
+
+    if (isGuest) localStorage.setItem(GUEST_NAME_KEY, guestName.trim());
 
     const target = isPdf
       ? {
@@ -98,7 +109,11 @@ export default function CommentPanel({
       const res = await fetch(apiBase, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ text: text.trim(), target }),
+        body: JSON.stringify({
+          text: text.trim(),
+          target,
+          ...(isGuest ? { authorName: guestName.trim() } : {}),
+        }),
       });
       const data = await res.json();
       if (res.ok && data.comment) {
@@ -112,11 +127,16 @@ export default function CommentPanel({
 
   async function handleReply(commentId: string) {
     if (!replyText.trim()) return;
+    if (isGuest && !guestName.trim()) { setGuestNameError(true); return; }
+    if (isGuest) localStorage.setItem(GUEST_NAME_KEY, guestName.trim());
     try {
       const res = await fetch(`${apiBase}/${commentId}/replies`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ text: replyText.trim() }),
+        body: JSON.stringify({
+          text: replyText.trim(),
+          ...(isGuest ? { authorName: guestName.trim() } : {}),
+        }),
       });
       const data = await res.json();
       if (res.ok && data.reply) {
@@ -355,6 +375,24 @@ export default function CommentPanel({
 
       {/* New comment form */}
       <form onSubmit={handleSubmit} className="p-3 border-t border-gray-200 dark:border-gray-700 space-y-2">
+        {/* Guest name field */}
+        {isGuest && (
+          <div className="flex items-center gap-2">
+            <span className="text-[10px] font-medium text-gray-400 dark:text-gray-500 shrink-0">Name</span>
+            <input
+              type="text"
+              value={guestName}
+              onChange={(e) => { setGuestName(e.target.value); if (e.target.value.trim()) setGuestNameError(false); }}
+              placeholder="What should we call you?"
+              maxLength={60}
+              className={`flex-1 px-2 py-1 text-xs border rounded-md bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-1 transition ${
+                guestNameError
+                  ? "border-red-400 focus:ring-red-400"
+                  : "border-gray-300 dark:border-gray-600 focus:ring-blue-500"
+              }`}
+            />
+          </div>
+        )}
         {pendingSelection && (
           <div className="bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg px-3 py-2 flex items-start gap-2">
             <svg className="w-4 h-4 text-yellow-500 mt-0.5 shrink-0" fill="currentColor" viewBox="0 0 24 24">
