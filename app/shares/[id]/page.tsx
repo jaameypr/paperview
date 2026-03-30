@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback, FormEvent } from "react";
+import { useState, useEffect, useCallback, useRef, FormEvent } from "react";
 import { useParams, useRouter } from "next/navigation";
 import dynamic from "next/dynamic";
 import AppShell from "@/components/layout/app-shell";
@@ -10,7 +10,8 @@ import { useSSE } from "@/hooks/useSSE";
 import { useAuth } from "@/hooks/useAuth";
 import { KIND_FEATURES } from "@/types/share";
 import type { ShareDTO, ShareVersionDTO } from "@/types/share";
-import type { Comment } from "@/types/comment";
+import type { Comment, SelectionData, SelectionEvent } from "@/types/comment";
+import type { PdfViewerHandle } from "@/components/viewers/pdf-viewer";
 
 const PdfViewer = dynamic(() => import("@/components/viewers/pdf-viewer"), { ssr: false });
 const CodeViewer = dynamic(() => import("@/components/viewers/code-viewer"), { ssr: false });
@@ -41,6 +42,15 @@ export default function ShareDetailPage() {
   const [showVersions, setShowVersions] = useState(false);
   const [showComments, setShowComments] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  // PDF-specific state
+  const [pdfCurrentPage, setPdfCurrentPage] = useState(1);
+  const [pdfTotalPages, setPdfTotalPages] = useState(0);
+  const [activeCommentId, setActiveCommentId] = useState<string | null>(null);
+  const [pendingSelection, setPendingSelection] = useState<SelectionData | null>(null);
+  const [selectionPopover, setSelectionPopover] = useState<{ top: number; left: number } | null>(null);
+  const pdfViewerRef = useRef<PdfViewerHandle>(null);
+  const contentAreaRef = useRef<HTMLDivElement>(null);
 
   // Password prompt state
   const [passwordRequired, setPasswordRequired] = useState(false);
@@ -133,6 +143,47 @@ export default function ShareDetailPage() {
 
   const sseUrl = activeVersionId ? `/api/shares/${shareId}/versions/${activeVersionId}/events` : null;
   useSSE(sseUrl, handleSSE);
+
+  // PDF text selection handler
+  const handlePdfSelection = useCallback((event: SelectionEvent) => {
+    setPendingSelection(event.selectionData);
+    // Convert viewport coords to container-relative
+    const containerRect = contentAreaRef.current?.getBoundingClientRect();
+    if (containerRect) {
+      setSelectionPopover({
+        top: event.popoverTop - containerRect.top,
+        left: event.popoverLeft - containerRect.left,
+      });
+    } else {
+      setSelectionPopover({ top: event.popoverTop, left: event.popoverLeft });
+    }
+    setShowComments(true);
+  }, []);
+
+  // When clicking a highlight in PDF, scroll comment panel to that comment
+  const handleHighlightClick = useCallback((commentId: string) => {
+    setActiveCommentId(commentId);
+    setShowComments(true);
+  }, []);
+
+  // When clicking a comment in the panel, scroll PDF to that page
+  const handleCommentClick = useCallback((commentId: string, page?: number) => {
+    setActiveCommentId(commentId);
+    if (page && pdfViewerRef.current) {
+      pdfViewerRef.current.scrollToPage(page);
+    }
+  }, []);
+
+  // Dismiss popover on click elsewhere
+  function dismissPopover() {
+    setSelectionPopover(null);
+  }
+
+  // Accept selection: close popover, keep selection data for the comment form
+  function acceptSelection() {
+    setSelectionPopover(null);
+    // pendingSelection is already set — the comment panel will use it
+  }
 
   // Password prompt screen
   if (passwordRequired) {
@@ -316,9 +367,9 @@ export default function ShareDetailPage() {
         )}
 
         {/* Content area */}
-        <div className="flex-1 flex overflow-hidden min-h-0">
+        <div ref={contentAreaRef} className="flex-1 flex overflow-hidden min-h-0 relative">
           {/* Viewer */}
-          <div className="flex-1 overflow-auto">
+          <div className="flex-1 overflow-auto" onClick={dismissPopover}>
             {hasPreview ? (
               <ViewerSwitch
                 kind={share.kind}
@@ -327,6 +378,13 @@ export default function ShareDetailPage() {
                 contentType={activeVersion?.contentType ?? ""}
                 filename={activeVersion?.originalFilename ?? ""}
                 fileSize={activeVersion?.fileSize ?? 0}
+                comments={comments}
+                activeCommentId={activeCommentId}
+                pdfViewerRef={pdfViewerRef}
+                onPdfPageChange={setPdfCurrentPage}
+                onPdfTotalPages={setPdfTotalPages}
+                onPdfSelection={handlePdfSelection}
+                onHighlightClick={handleHighlightClick}
               />
             ) : (
               <div className="p-4">
@@ -340,17 +398,35 @@ export default function ShareDetailPage() {
             )}
           </div>
 
+          {/* Selection popover */}
+          {selectionPopover && (
+            <button
+              onClick={acceptSelection}
+              className="absolute z-50 bg-blue-600 hover:bg-blue-700 text-white text-xs font-medium px-3 py-1.5 rounded-lg shadow-lg transition-colors"
+              style={{ top: selectionPopover.top, left: selectionPopover.left }}
+            >
+              💬 Comment
+            </button>
+          )}
+
           {/* Comments sidebar */}
           {hasComments && showComments && (
             <div className="w-80 shrink-0 border-l border-gray-200 dark:border-gray-800 bg-gray-50 dark:bg-gray-900/50">
               <CommentPanel
                 shareId={shareId}
                 versionId={activeVersionId ?? ""}
+                shareKind={share.kind}
                 comments={comments}
-                onCommentAdded={(c) => setComments((prev) => [...prev, c])}
+                currentPage={pdfCurrentPage}
+                totalPages={pdfTotalPages}
+                activeCommentId={activeCommentId}
+                onCommentAdded={(c) => { setComments((prev) => [...prev, c]); setPendingSelection(null); }}
                 onCommentUpdated={(id, u) => setComments((prev) => prev.map((c) => c._id === id ? { ...c, ...u } as Comment : c))}
                 onCommentDeleted={(id) => setComments((prev) => prev.filter((c) => c._id !== id))}
                 onReplyAdded={(cid, r) => setComments((prev) => prev.map((c) => c._id === cid ? { ...c, replies: [...c.replies, r] } : c))}
+                onCommentClick={handleCommentClick}
+                pendingSelection={pendingSelection}
+                onClearSelection={() => setPendingSelection(null)}
               />
             </div>
           )}
@@ -362,12 +438,31 @@ export default function ShareDetailPage() {
 
 function ViewerSwitch({
   kind, contentUrl, downloadUrl, contentType, filename, fileSize,
+  comments, activeCommentId, pdfViewerRef, onPdfPageChange, onPdfTotalPages, onPdfSelection, onHighlightClick,
 }: {
   kind: string; contentUrl: string; downloadUrl: string; contentType: string; filename: string; fileSize: number;
+  comments?: Comment[];
+  activeCommentId?: string | null;
+  pdfViewerRef?: React.RefObject<PdfViewerHandle | null>;
+  onPdfPageChange?: (page: number) => void;
+  onPdfTotalPages?: (total: number) => void;
+  onPdfSelection?: (event: SelectionEvent) => void;
+  onHighlightClick?: (commentId: string) => void;
 }) {
   switch (kind) {
     case "pdf":
-      return <PdfViewer contentUrl={contentUrl} />;
+      return (
+        <PdfViewer
+          ref={pdfViewerRef}
+          contentUrl={contentUrl}
+          comments={comments ?? []}
+          activeCommentId={activeCommentId}
+          onPageChange={onPdfPageChange}
+          onTotalPagesChange={onPdfTotalPages}
+          onSelection={onPdfSelection}
+          onHighlightClick={onHighlightClick}
+        />
+      );
     case "code":
       return <CodeViewer contentUrl={contentUrl} />;
     case "image":
