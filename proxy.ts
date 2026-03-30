@@ -67,7 +67,7 @@ async function verifyToken(token: string, secret: string): Promise<boolean> {
     const isValid = await crypto.subtle.verify(
       "HMAC",
       key,
-      base64urlToBytes(encodedSig),
+      base64urlToBytes(encodedSig) as Uint8Array<ArrayBuffer>,
       encoder.encode(encodedPayload)
     );
     if (!isValid) return false;
