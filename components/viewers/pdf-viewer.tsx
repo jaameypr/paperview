@@ -156,6 +156,10 @@ export default function PdfViewer({ contentUrl }: Props) {
                   width={pageWidth && scale === 1.2 ? pageWidth : undefined}
                   renderTextLayer={true}
                   renderAnnotationLayer={true}
+                  onRenderTextLayerError={(error) => {
+                    if (error?.name === "AbortException") return;
+                    console.error("TextLayer error:", error);
+                  }}
                 />
               </div>
             ))}
