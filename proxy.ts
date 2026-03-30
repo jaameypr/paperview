@@ -10,8 +10,8 @@ import { NextRequest, NextResponse } from "next/server";
 export const AUTH_COOKIE_NAME = "pv_auth";
 
 /** Paths that require authentication */
-const PROTECTED_PATHS = ["/dashboard", "/shares", "/admin", "/change-password"];
-const PROTECTED_API_PATHS = ["/api/admin", "/api/shares"];
+const PROTECTED_PATHS = ["/dashboard", "/shares/new", "/admin", "/change-password"];
+const PROTECTED_API_PATHS = ["/api/admin"];
 
 /** Paths that are always public */
 const PUBLIC_PREFIXES = [
@@ -19,7 +19,6 @@ const PUBLIC_PREFIXES = [
   "/api/auth",
   "/_next",
   "/favicon.ico",
-  "/api/shares/public",
 ];
 
 function isProtectedPath(pathname: string): boolean {

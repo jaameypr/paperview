@@ -1,17 +1,17 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, FormEvent } from "react";
 import { useParams, useRouter } from "next/navigation";
 import dynamic from "next/dynamic";
 import AppShell from "@/components/layout/app-shell";
 import CommentPanel from "@/components/shares/comment-panel";
 import DownloadViewer from "@/components/viewers/download-viewer";
 import { useSSE } from "@/hooks/useSSE";
+import { useAuth } from "@/hooks/useAuth";
 import { KIND_FEATURES } from "@/types/share";
 import type { ShareDTO, ShareVersionDTO } from "@/types/share";
 import type { Comment } from "@/types/comment";
 
-// Dynamic imports for viewers to avoid SSR issues
 const PdfViewer = dynamic(() => import("@/components/viewers/pdf-viewer"), { ssr: false });
 const CodeViewer = dynamic(() => import("@/components/viewers/code-viewer"), { ssr: false });
 const ImageViewer = dynamic(() => import("@/components/viewers/image-viewer"), { ssr: false });
@@ -30,6 +30,7 @@ export default function ShareDetailPage() {
   const params = useParams<{ id: string }>();
   const shareId = params.id;
   const router = useRouter();
+  const { user } = useAuth();
 
   const [share, setShare] = useState<ShareDTO | null>(null);
   const [versions, setVersions] = useState<(ShareVersionDTO & { commentCount?: number })[]>([]);
@@ -39,21 +40,70 @@ export default function ShareDetailPage() {
   const [loading, setLoading] = useState(true);
   const [showVersions, setShowVersions] = useState(false);
   const [showComments, setShowComments] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  // Password prompt state
+  const [passwordRequired, setPasswordRequired] = useState(false);
+  const [passwordTitle, setPasswordTitle] = useState("");
+  const [passwordInput, setPasswordInput] = useState("");
+  const [passwordError, setPasswordError] = useState("");
+  const [passwordLoading, setPasswordLoading] = useState(false);
 
   // Fetch share data
-  useEffect(() => {
+  const fetchShare = useCallback(() => {
+    setLoading(true);
     fetch(`/api/shares/${shareId}`)
       .then((r) => r.json())
       .then((data) => {
-        if (data.error) { router.push("/dashboard"); return; }
+        if (data.passwordRequired) {
+          setPasswordRequired(true);
+          setPasswordTitle(data.share?.title ?? "Protected Share");
+          setLoading(false);
+          return;
+        }
+        if (data.error) {
+          setError(data.error);
+          setLoading(false);
+          return;
+        }
+        setPasswordRequired(false);
         setShare(data.share);
         setVersions(data.versions ?? []);
         setAccess(data.access ?? "none");
         setActiveVersionId(data.share.currentVersionId);
+        setLoading(false);
       })
-      .catch(() => router.push("/dashboard"))
-      .finally(() => setLoading(false));
-  }, [shareId, router]);
+      .catch(() => { setError("Failed to load share"); setLoading(false); });
+  }, [shareId]);
+
+  useEffect(() => { fetchShare(); }, [fetchShare]);
+
+  // Handle password submit
+  async function handlePasswordSubmit(e: FormEvent) {
+    e.preventDefault();
+    if (!passwordInput.trim()) return;
+    setPasswordLoading(true);
+    setPasswordError("");
+    try {
+      const res = await fetch(`/api/shares/${shareId}/access`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ password: passwordInput }),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        setPasswordRequired(false);
+        setPasswordInput("");
+        fetchShare();
+      } else {
+        setPasswordError(data.error ?? "Invalid password");
+      }
+    } catch {
+      setPasswordError("Network error");
+    } finally {
+      setPasswordLoading(false);
+    }
+  }
 
   // Fetch comments for active version
   useEffect(() => {
@@ -84,11 +134,69 @@ export default function ShareDetailPage() {
   const sseUrl = activeVersionId ? `/api/shares/${shareId}/versions/${activeVersionId}/events` : null;
   useSSE(sseUrl, handleSSE);
 
-  if (loading || !share) {
+  // Password prompt screen
+  if (passwordRequired) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-50 dark:bg-gray-950 px-4">
+        <div className="w-full max-w-sm">
+          <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-2xl p-6 shadow-lg">
+            <div className="flex items-center justify-center w-12 h-12 bg-amber-100 dark:bg-amber-900/30 rounded-full mx-auto mb-4">
+              <svg className="w-6 h-6 text-amber-600 dark:text-amber-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+              </svg>
+            </div>
+            <h1 className="text-lg font-bold text-gray-900 dark:text-white text-center mb-1">
+              {passwordTitle}
+            </h1>
+            <p className="text-sm text-gray-500 dark:text-gray-400 text-center mb-4">
+              This share is password protected.
+            </p>
+            <form onSubmit={handlePasswordSubmit}>
+              <input
+                type="password"
+                value={passwordInput}
+                onChange={(e) => setPasswordInput(e.target.value)}
+                placeholder="Enter password"
+                autoFocus
+                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg text-sm bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 mb-3"
+              />
+              {passwordError && (
+                <p className="text-xs text-red-500 mb-2">{passwordError}</p>
+              )}
+              <button
+                type="submit"
+                disabled={passwordLoading || !passwordInput.trim()}
+                className="w-full bg-blue-600 hover:bg-blue-700 disabled:bg-blue-300 text-white py-2 rounded-lg text-sm font-medium transition-colors"
+              >
+                {passwordLoading ? "Checking…" : "Unlock"}
+              </button>
+            </form>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (loading) {
     return (
       <AppShell>
         <div className="flex items-center justify-center h-full">
           <div className="animate-spin w-8 h-8 border-2 border-blue-500 border-t-transparent rounded-full" />
+        </div>
+      </AppShell>
+    );
+  }
+
+  if (error || !share) {
+    return (
+      <AppShell>
+        <div className="flex flex-col items-center justify-center h-full gap-3">
+          <p className="text-gray-500 dark:text-gray-400">{error ?? "Share not found"}</p>
+          {user && (
+            <button onClick={() => router.push("/dashboard")} className="text-sm text-blue-600 hover:underline">
+              Go to Dashboard
+            </button>
+          )}
         </div>
       </AppShell>
     );
@@ -210,7 +318,7 @@ export default function ShareDetailPage() {
         {/* Content area */}
         <div className="flex-1 flex overflow-hidden min-h-0">
           {/* Viewer */}
-          <div className={`flex-1 overflow-auto p-4 ${hasComments && showComments ? "" : ""}`}>
+          <div className="flex-1 overflow-auto">
             {hasPreview ? (
               <ViewerSwitch
                 kind={share.kind}
@@ -221,12 +329,14 @@ export default function ShareDetailPage() {
                 fileSize={activeVersion?.fileSize ?? 0}
               />
             ) : (
-              <DownloadViewer
-                filename={activeVersion?.originalFilename ?? "file"}
-                fileSize={activeVersion?.fileSize ?? 0}
-                downloadUrl={downloadUrl}
-                kind={share.kind}
-              />
+              <div className="p-4">
+                <DownloadViewer
+                  filename={activeVersion?.originalFilename ?? "file"}
+                  fileSize={activeVersion?.fileSize ?? 0}
+                  downloadUrl={downloadUrl}
+                  kind={share.kind}
+                />
+              </div>
             )}
           </div>
 
@@ -272,6 +382,10 @@ function ViewerSwitch({
     case "markdown":
       return <MarkdownViewer contentUrl={contentUrl} />;
     default:
-      return <DownloadViewer filename={filename} fileSize={fileSize} downloadUrl={downloadUrl} kind={kind} />;
+      return (
+        <div className="p-4">
+          <DownloadViewer filename={filename} fileSize={fileSize} downloadUrl={downloadUrl} kind={kind} />
+        </div>
+      );
   }
 }

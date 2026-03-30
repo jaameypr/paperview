@@ -24,7 +24,16 @@ export async function GET(
     const share = await Share.findById(id);
     if (!share) return NextResponse.json({ error: "Share not found" }, { status: 404 });
 
-    const access = await getAccessLevel(share, auth);
+    const access = await getAccessLevel(share, auth, cookieStore);
+
+    // For password-protected shares where password hasn't been provided
+    if (access === "none" && share.visibility === "public_password") {
+      return NextResponse.json({
+        passwordRequired: true,
+        share: { _id: String(share._id), title: share.title, visibility: share.visibility },
+      });
+    }
+
     if (!hasAccess(access, "viewer")) {
       return NextResponse.json({ error: "Access denied" }, { status: 403 });
     }

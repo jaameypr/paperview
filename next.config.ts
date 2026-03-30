@@ -4,6 +4,9 @@ const nextConfig: NextConfig = {
   // Standalone output for Docker deployments
   output: "standalone",
 
+  // Allow LAN access during development (e.g. testing from other devices)
+  allowedDevOrigins: ["192.168.40.172"],
+
   // Turbopack config (default in Next.js 16)
   // The canvas alias is not needed with Turbopack because the PDF viewer
   // is loaded client-side only (ssr: false), so pdfjs-dist never runs on the server.

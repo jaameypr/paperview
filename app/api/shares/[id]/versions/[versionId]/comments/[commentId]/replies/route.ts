@@ -24,7 +24,7 @@ export async function POST(
       return NextResponse.json({ error: "Comments are disabled" }, { status: 403 });
     }
 
-    const access = await getAccessLevel(share, auth);
+    const access = await getAccessLevel(share, auth, cookieStore);
     if (!hasAccess(access, "commenter")) {
       return NextResponse.json({ error: "Access denied" }, { status: 403 });
     }

@@ -22,7 +22,7 @@ export async function GET(
     const share = await Share.findById(id);
     if (!share) return NextResponse.json({ error: "Share not found" }, { status: 404 });
 
-    const access = await getAccessLevel(share, auth);
+    const access = await getAccessLevel(share, auth, cookieStore);
     if (!hasAccess(access, "viewer")) {
       return NextResponse.json({ error: "Access denied" }, { status: 403 });
     }

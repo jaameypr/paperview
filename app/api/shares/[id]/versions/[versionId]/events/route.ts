@@ -22,7 +22,7 @@ export async function GET(
     return new Response("Share not found", { status: 404 });
   }
 
-  const access = await getAccessLevel(share, auth);
+  const access = await getAccessLevel(share, auth, cookieStore);
   if (!hasAccess(access, "viewer")) {
     return new Response("Access denied", { status: 403 });
   }

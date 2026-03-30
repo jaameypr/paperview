@@ -84,13 +84,33 @@ export async function POST(request: NextRequest) {
     if (!title || !title.trim()) {
       return NextResponse.json({ error: "Title is required" }, { status: 400 });
     }
-    if (!file) {
-      return NextResponse.json({ error: "File is required" }, { status: 400 });
-    }
 
-    const kind = getKindFromExtension(file.name);
-    const buffer = Buffer.from(await file.arrayBuffer());
-    const { storageKey, checksum, size } = await saveFile(buffer, file.name);
+    // Support either file upload or pasted text content
+    const textContent = formData.get("content") as string | null;
+    const textFilename = formData.get("filename") as string | null;
+
+    let kind: ReturnType<typeof getKindFromExtension>;
+    let storageKey: string;
+    let checksum: string;
+    let size: number;
+    let contentType: string;
+    let originalFilename: string;
+
+    if (file) {
+      kind = getKindFromExtension(file.name);
+      const buffer = Buffer.from(await file.arrayBuffer());
+      ({ storageKey, checksum, size } = await saveFile(buffer, file.name));
+      contentType = file.type || "application/octet-stream";
+      originalFilename = file.name;
+    } else if (textContent !== null && textFilename) {
+      kind = getKindFromExtension(textFilename);
+      const buffer = Buffer.from(textContent, "utf-8");
+      ({ storageKey, checksum, size } = await saveFile(buffer, textFilename));
+      contentType = "text/plain; charset=utf-8";
+      originalFilename = textFilename;
+    } else {
+      return NextResponse.json({ error: "Either a file or text content with filename is required" }, { status: 400 });
+    }
 
     const passwordHash = password && password.trim()
       ? await hashSharePassword(password.trim())
@@ -114,8 +134,8 @@ export async function POST(request: NextRequest) {
       versionNumber: 1,
       createdByUserId: auth.userId,
       changeNote: changeNote.trim(),
-      contentType: file.type || "application/octet-stream",
-      originalFilename: file.name,
+      contentType,
+      originalFilename,
       storageKey,
       fileSize: size,
       checksum,
