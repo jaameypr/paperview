@@ -21,8 +21,9 @@
 .env.test.local
 .env.production.local
 
-# protected PDF assets — NEVER commit these
+# protected assets and file storage — NEVER commit these
 /protected-assets/
+/storage/
 
 # debug
 npm-debug.log*

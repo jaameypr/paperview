@@ -9,6 +9,7 @@
     "lint": "next lint"
   },
   "dependencies": {
+    "@tailwindcss/typography": "^0.5.19",
     "bcryptjs": "^3.0.3",
     "highlight.js": "^11.11.1",
     "mongoose": "^8.9.0",
