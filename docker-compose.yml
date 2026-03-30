@@ -1,0 +1,42 @@
+services:
+  # ── Next.js application ──────────────────────────────────────────────
+  app:
+    build: .
+    container_name: document-comments-app
+    restart: unless-stopped
+    ports:
+      - "7070:3000"
+    environment:
+      - MONGODB_URI=mongodb://mongodb:27017/document-comments
+      - DOC_PASSWORD=${DOC_PASSWORD:?DOC_PASSWORD is required}
+      - AUTH_SECRET=${AUTH_SECRET:?AUTH_SECRET is required}
+    depends_on:
+      mongodb:
+        condition: service_healthy
+    networks:
+      - app-network
+
+  # ── MongoDB ──────────────────────────────────────────────────────────
+  mongodb:
+    image: mongo:7
+    container_name: document-comments-mongo
+    restart: unless-stopped
+    volumes:
+      - mongo-data:/data/db
+    ports:
+      - "27018:27017"
+    healthcheck:
+      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+    networks:
+      - app-network
+
+volumes:
+  mongo-data:
+
+networks:
+  app-network:
+    driver: bridge
