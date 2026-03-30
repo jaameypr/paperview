@@ -1,25 +1,25 @@
 /**
- * proxy.ts — Next.js 16 Proxy (ersetzt middleware.ts).
+ * proxy.ts — Next.js 16 Proxy (replaces middleware.ts).
  *
- * In Next.js 16 wurde "middleware.ts" durch "proxy.ts" abgelöst.
- * Nur Web Crypto API (kein Node.js) → läuft im Edge Runtime.
+ * Runs in Edge Runtime — Web Crypto API only, no Node.js crypto.
+ * Verifies HMAC-SHA256 auth tokens carrying user payload.
  */
 
 import { NextRequest, NextResponse } from "next/server";
 
-export const AUTH_COOKIE_NAME = "doc_auth";
+export const AUTH_COOKIE_NAME = "pv_auth";
 
 /** Paths that require authentication */
-const PROTECTED_PATHS = ["/doc"];
-const PROTECTED_API_PATHS = ["/api/comments", "/api/document"];
+const PROTECTED_PATHS = ["/dashboard", "/shares", "/admin", "/change-password"];
+const PROTECTED_API_PATHS = ["/api/admin", "/api/shares"];
 
 /** Paths that are always public */
 const PUBLIC_PREFIXES = [
   "/login",
-  "/api/login",
-  "/api/logout",
+  "/api/auth",
   "/_next",
   "/favicon.ico",
+  "/api/shares/public",
 ];
 
 function isProtectedPath(pathname: string): boolean {
@@ -44,15 +44,20 @@ function base64urlToBytes(base64url: string): Uint8Array {
   return bytes;
 }
 
-async function verifyToken(token: string, secret: string): Promise<boolean> {
+interface TokenPayload {
+  exp?: number;
+  mustChangePassword?: boolean;
+}
+
+async function verifyToken(token: string, secret: string): Promise<TokenPayload | null> {
   try {
     const dotIndex = token.lastIndexOf(".");
-    if (dotIndex === -1) return false;
+    if (dotIndex === -1) return null;
 
     const encodedPayload = token.slice(0, dotIndex);
     const encodedSig = token.slice(dotIndex + 1);
 
-    if (!encodedPayload || !encodedSig) return false;
+    if (!encodedPayload || !encodedSig) return null;
 
     const encoder = new TextEncoder();
 
@@ -70,7 +75,7 @@ async function verifyToken(token: string, secret: string): Promise<boolean> {
       base64urlToBytes(encodedSig) as Uint8Array<ArrayBuffer>,
       encoder.encode(encodedPayload)
     );
-    if (!isValid) return false;
+    if (!isValid) return null;
 
     const payloadJson = atob(
       encodedPayload
@@ -78,12 +83,12 @@ async function verifyToken(token: string, secret: string): Promise<boolean> {
         .replace(/_/g, "/")
         .padEnd(encodedPayload.length + ((4 - (encodedPayload.length % 4)) % 4), "=")
     );
-    const payload = JSON.parse(payloadJson) as { exp?: number };
-    if (payload.exp && Date.now() > payload.exp) return false;
+    const payload = JSON.parse(payloadJson) as TokenPayload;
+    if (payload.exp && Date.now() > payload.exp) return null;
 
-    return true;
+    return payload;
   } catch {
-    return false;
+    return null;
   }
 }
 
@@ -97,15 +102,23 @@ export async function proxy(request: NextRequest) {
   const token = request.cookies.get(AUTH_COOKIE_NAME)?.value;
   const secret = process.env.AUTH_SECRET ?? "";
 
-  const authenticated = token ? await verifyToken(token, secret) : false;
+  const payload = token ? await verifyToken(token, secret) : null;
 
-  if (!authenticated) {
+  if (!payload) {
     if (pathname.startsWith("/api/")) {
-      return NextResponse.json({ error: "Nicht autorisiert" }, { status: 401 });
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
     const loginUrl = new URL("/login", request.url);
     loginUrl.searchParams.set("redirect", pathname);
     return NextResponse.redirect(loginUrl);
+  }
+
+  // Force password change redirect
+  if (payload.mustChangePassword && pathname !== "/change-password" && !pathname.startsWith("/api/auth")) {
+    if (pathname.startsWith("/api/")) {
+      return NextResponse.json({ error: "Password change required" }, { status: 403 });
+    }
+    return NextResponse.redirect(new URL("/change-password", request.url));
   }
 
   return NextResponse.next();
