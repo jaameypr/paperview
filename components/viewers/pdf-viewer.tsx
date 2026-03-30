@@ -142,7 +142,7 @@ export default function PdfViewer({ contentUrl }: Props) {
           <div className="flex flex-col items-center py-4 gap-4">
             {Array.from({ length: numPages }, (_, i) => i + 1).map((pageNum) => (
               <div
-                key={pageNum}
+                key={`${pageNum}-${scale}`}
                 data-page={pageNum}
                 ref={(el) => {
                   if (el) pageRefs.current.set(pageNum, el);
@@ -156,10 +156,6 @@ export default function PdfViewer({ contentUrl }: Props) {
                   width={pageWidth && scale === 1.2 ? pageWidth : undefined}
                   renderTextLayer={true}
                   renderAnnotationLayer={true}
-                  onRenderTextLayerError={(error) => {
-                    if (error?.name === "AbortException") return;
-                    console.error("TextLayer error:", error);
-                  }}
                 />
               </div>
             ))}
