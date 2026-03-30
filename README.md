@@ -1,78 +1,78 @@
-# Dokument Kommentare
+# Paperview
 
-Eine passwortgeschützte Webanwendung zum gemeinsamen Kommentieren eines PDF-Dokuments.
+A self-hosted PDF viewer with text highlighting, threaded comments, and a shared review experience — built with Next.js and MongoDB.
 
 ## Features
 
-- **Passwortschutz** — Globales Passwort schützt die App und die PDF-Datei selbst
-- **Geschützte PDF-Auslieferung** — PDF liegt nicht in `public/`, sondern wird über `/api/document` mit Auth-Check ausgeliefert
-- **PDF-Viewer** — Vertikales Scrollen aller Seiten, aktuelle Seite per IntersectionObserver ermittelt
-- **Text markieren** — Text im PDF auswählen → Popover → Kommentar mit Markierung speichern
-- **Highlight-Overlay** — Markierungen anderer Nutzer werden beim Laden wieder angezeigt
-- **Kommentare** — Mit oder ohne Textmarkierung, Seite, Autor (lokal gespeichert)
-- **Antworten** — Jeder Kommentar kann Antworten erhalten
-- **Auflösen / Löschen** — Kommentare können aufgelöst oder gelöscht werden
-- **Filter** — Nach Seite, nach Status (offen / aufgelöst / alle)
-- **Live-Sync** — Polling alle 5 Sekunden
+- **Password protection** — A global password protects the app and the PDF file itself
+- **Secure PDF delivery** — The PDF is not served from `public/`; instead it is streamed via `/api/document` with an auth check
+- **PDF viewer** — Vertical scrolling through all pages, current page detected via IntersectionObserver
+- **Text highlighting** — Select text in the PDF → popover → save a comment with highlight
+- **Highlight overlay** — Other users' highlights are rendered on page load
+- **Comments** — With or without text highlight, page number, author (stored locally)
+- **Replies** — Every comment supports threaded replies
+- **Resolve / Delete** — Comments can be resolved or deleted
+- **Filters** — By page, by status (open / resolved / all)
+- **Live sync** — Polling every 5 seconds
 
 ## Tech Stack
 
-| Bereich | Technologie |
+| Area | Technology |
 |---|---|
 | Framework | Next.js 16 (App Router, Turbopack) |
-| Sprache | TypeScript |
+| Language | TypeScript |
 | Styling | Tailwind CSS |
-| Datenbank | MongoDB + Mongoose |
-| PDF-Anzeige | react-pdf / pdfjs-dist |
-| Auth | HMAC-SHA256-signierte Cookies |
+| Database | MongoDB + Mongoose |
+| PDF rendering | react-pdf / pdfjs-dist |
+| Auth | HMAC-SHA256 signed cookies |
 
 ---
 
 ## Setup
 
-### 1. Voraussetzungen
+### 1. Prerequisites
 
-- Node.js 18 oder neuer
-- MongoDB (lokal oder Atlas)
+- Node.js 18 or newer
+- MongoDB (local or Atlas)
 
-### 2. Abhängigkeiten installieren
+### 2. Install dependencies
 
 ```bash
 npm install
 ```
 
-### 3. Environment-Variablen
+### 3. Environment variables
 
 ```bash
 cp .env.example .env.local
 ```
 
-Werte in `.env.local` eintragen:
+Fill in the values in `.env.local`:
 
 ```env
 MONGODB_URI=mongodb://localhost:27017/document-comments
-DOC_PASSWORD=dein-geheimes-passwort
-AUTH_SECRET=langer-zufaelliger-string
+DOC_PASSWORD=your-secret-password
+AUTH_SECRET=long-random-string
 ```
 
-AUTH_SECRET generieren:
+Generate an AUTH_SECRET:
 ```bash
 node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
 ```
 
-### 4. PDF ablegen — WICHTIG
+### 4. Place the PDF — IMPORTANT
 
-Die PDF-Datei muss hier abgelegt werden:
+The PDF file must be placed at:
 
 ```
 protected-assets/document.pdf
 ```
 
-**Nicht** in `public/` — sonst ist sie ohne Passwort erreichbar.
+**Not** in `public/` — otherwise it would be accessible without a password.
 
-Die Datei wird über `/api/document` (geschützt) ausgeliefert.
+The file is served via `/api/document` (protected).
 
-### 5. Starten
+### 5. Start
 
 ```bash
 npm run dev
@@ -81,18 +81,18 @@ npm run dev
 
 ---
 
-## Projektstruktur
+## Project Structure
 
 ```
-document-comments/
+paperview/
 ├── app/
 │   ├── layout.tsx
-│   ├── page.tsx                          → Redirect zu /doc oder /login
+│   ├── page.tsx                          → Redirect to /doc or /login
 │   ├── globals.css
 │   ├── login/page.tsx                    → Login
-│   ├── doc/page.tsx                      → Geschützte Dokumentseite
+│   ├── doc/page.tsx                      → Protected document page
 │   └── api/
-│       ├── document/route.ts             → GET  /api/document (PDF-Stream, geschützt)
+│       ├── document/route.ts             → GET  /api/document (PDF stream, protected)
 │       ├── login/route.ts                → POST /api/login
 │       ├── logout/route.ts               → POST /api/logout
 │       └── comments/
@@ -101,17 +101,17 @@ document-comments/
 │               ├── route.ts              → PATCH / DELETE /api/comments/:id
 │               └── replies/route.ts      → POST /api/comments/:id/replies
 ├── components/
-│   ├── doc-client.tsx                    → Haupt-Client-Komponente
-│   ├── pdf-viewer.tsx                    → Scroll-Viewer, Highlights, Selektion
-│   ├── comment-list.tsx                  → Kommentarliste mit Replies / Aktionen
-│   └── comment-form.tsx                  → Formular (localStorage, Markierungs-Prefill)
+│   ├── doc-client.tsx                    → Main client component
+│   ├── pdf-viewer.tsx                    → Scroll viewer, highlights, selection
+│   ├── comment-list.tsx                  → Comment list with replies / actions
+│   └── comment-form.tsx                  → Form (localStorage, highlight prefill)
 ├── lib/
-│   ├── auth.ts                           → HMAC-Token (Node.js)
-│   └── mongodb.ts                        → Mongoose-Singleton
+│   ├── auth.ts                           → HMAC token (Node.js)
+│   └── mongodb.ts                        → Mongoose singleton
 ├── models/Comment.ts                     → Schema (quote, highlights, replies, resolved)
-├── types/comment.ts                      → Gemeinsame TypeScript-Typen
+├── types/comment.ts                      → Shared TypeScript types
 ├── protected-assets/
-│   └── document.pdf                      → ← HIER deine PDF ablegen
+│   └── document.pdf                      → ← Place your PDF here
 ├── proxy.ts                              → Next.js 16 Proxy (Edge Runtime)
 ├── .env.example
 ├── next.config.ts
@@ -121,41 +121,41 @@ document-comments/
 
 ---
 
-## API-Endpunkte
+## API Endpoints
 
-| Method | Pfad | Beschreibung |
+| Method | Path | Description |
 |---|---|---|
-| GET | `/api/document` | PDF-Datei streamen (geschützt) |
-| POST | `/api/login` | Passwort prüfen, Cookie setzen |
-| POST | `/api/logout` | Cookie löschen |
-| GET | `/api/comments` | Alle Kommentare |
-| GET | `/api/comments?page=2` | Kommentare für Seite 2 |
-| GET | `/api/comments?status=open` | Nur offene Kommentare |
-| POST | `/api/comments` | Neuen Kommentar anlegen |
-| PATCH | `/api/comments/:id` | Kommentar auflösen / erneut öffnen |
-| DELETE | `/api/comments/:id` | Kommentar + Replies löschen |
-| POST | `/api/comments/:id/replies` | Antwort hinzufügen |
+| GET | `/api/document` | Stream PDF file (protected) |
+| POST | `/api/login` | Verify password, set cookie |
+| POST | `/api/logout` | Clear cookie |
+| GET | `/api/comments` | All comments |
+| GET | `/api/comments?page=2` | Comments for page 2 |
+| GET | `/api/comments?status=open` | Only open comments |
+| POST | `/api/comments` | Create a new comment |
+| PATCH | `/api/comments/:id` | Resolve / reopen a comment |
+| DELETE | `/api/comments/:id` | Delete comment + replies |
+| POST | `/api/comments/:id/replies` | Add a reply |
 
-### POST /api/comments – Body
+### POST /api/comments — Body
 
 ```json
 {
   "author": "Max",
   "page": 3,
-  "text": "Sehr interessanter Abschnitt!",
-  "quote": "Der markierte Text",
+  "text": "Very interesting section!",
+  "quote": "The selected text",
   "highlightRects": [
     { "x": 10.5, "y": 23.1, "width": 55.3, "height": 1.8 }
   ]
 }
 ```
 
-- `author` optional → Standard: `"Anonym"`
-- `page` Pflicht, ganze Zahl ≥ 1
-- `text` Pflicht
-- `quote` + `highlightRects` optional (nur wenn Text markiert wurde)
+- `author` optional → defaults to `"Anonym"`
+- `page` required, integer ≥ 1
+- `text` required
+- `quote` + `highlightRects` optional (only present when text was selected)
 
-### PATCH /api/comments/:id – Body
+### PATCH /api/comments/:id — Body
 
 ```json
 { "resolved": true }
@@ -163,113 +163,113 @@ document-comments/
 
 ---
 
-## Markierungen verwenden
+## Using Highlights
 
-1. Text in der PDF mit der Maus auswählen
-2. Popover erscheint → „Kommentieren" klicken
-3. Das Formular im rechten Panel wird mit dem markierten Text vorausgefüllt
-4. Kommentartext eingeben und absenden
-5. Markierung erscheint bei allen Nutzern als gelbe Überlagerung
+1. Select text in the PDF with your mouse
+2. A popover appears → click "Comment"
+3. The form in the right panel is pre-filled with the selected text
+4. Enter your comment and submit
+5. The highlight appears for all users as a yellow overlay
 
-Beim Klick auf einen Kommentar mit Markierung: PDF scrollt zur entsprechenden Seite.
-Beim Klick auf eine Markierung im PDF: Kommentar wird im Panel hervorgehoben.
+Clicking a comment with a highlight: the PDF scrolls to the corresponding page.
+Clicking a highlight in the PDF: the comment is focused in the panel.
 
 ---
 
-## Sicherheit
+## Security
 
-- PDF liegt in `protected-assets/` — **nicht** unter `public/`
-- `/api/document` prüft Auth-Cookie vor der Auslieferung
-- Passwort nur aus `.env.local`, niemals im Code
-- Passwortvergleich timing-safe (`timingSafeEqual`)
-- Auth-Cookie: `httpOnly`, `sameSite=lax`, `secure` in Production, HMAC-signiert
-- Doppelte Auth-Prüfung: `proxy.ts` (Edge) + Route Handler (Node.js)
+- The PDF is stored in `protected-assets/` — **not** under `public/`
+- `/api/document` checks the auth cookie before serving the file
+- The password is read only from `.env.local`, never hardcoded
+- Password comparison is timing-safe (`timingSafeEqual`)
+- Auth cookie: `httpOnly`, `sameSite=lax`, `secure` in production, HMAC-signed
+- Dual auth check: `proxy.ts` (Edge) + route handler (Node.js)
 
 ---
 
 ## Docker / Docker Compose
 
-Die gesamte App (Next.js + MongoDB) lässt sich mit **einem einzigen Befehl** starten.
+The entire app (Next.js + MongoDB) can be started with **a single command**.
 
-### Voraussetzungen
+### Prerequisites
 
-- Docker und Docker Compose (v2) installiert
-- PDF-Datei unter `protected-assets/document.pdf` abgelegt
+- Docker and Docker Compose (v2) installed
+- PDF file placed at `protected-assets/document.pdf`
 
-### 1. Environment-Variablen anlegen
+### 1. Set up environment variables
 
 ```bash
 cp .env.example .env
 ```
 
-In `.env` mindestens diese Werte setzen:
+Set at least these values in `.env`:
 
 ```env
-DOC_PASSWORD=dein-geheimes-passwort
-AUTH_SECRET=langer-zufaelliger-string
+DOC_PASSWORD=your-secret-password
+AUTH_SECRET=long-random-string
 ```
 
-> `MONGODB_URI` muss **nicht** gesetzt werden — Docker Compose setzt es automatisch auf `mongodb://mongodb:27017/document-comments`.
+> `MONGODB_URI` does **not** need to be set — Docker Compose automatically configures it as `mongodb://mongodb:27017/document-comments`.
 
-AUTH_SECRET generieren:
+Generate an AUTH_SECRET:
 ```bash
 node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
-# oder ohne Node:
+# or without Node:
 openssl rand -hex 32
 ```
 
-### 2. Starten
+### 2. Start
 
 ```bash
 docker compose up --build
 ```
 
-Die App ist danach erreichbar unter: **http://localhost:7070**
+The app is then available at: **http://localhost:7070**
 
-Beim ersten Start wird das Docker-Image gebaut — danach startet alles in Sekunden.
+On first start the Docker image is built — after that everything starts in seconds.
 
-### 3. Im Hintergrund starten
+### 3. Start in background
 
 ```bash
 docker compose up --build -d
 ```
 
-### 4. Stoppen
+### 4. Stop
 
 ```bash
-# Container stoppen (Daten bleiben erhalten)
+# Stop containers (data is preserved)
 docker compose down
 
-# Container stoppen UND MongoDB-Daten löschen
+# Stop containers AND delete MongoDB data
 docker compose down -v
 ```
 
-### 5. Logs ansehen
+### 5. View logs
 
 ```bash
 docker compose logs -f app
 docker compose logs -f mongodb
 ```
 
-### Architektur
+### Architecture
 
-| Service    | Container-Name             | Beschreibung                      |
+| Service    | Container Name             | Description                      |
 |------------|----------------------------|-----------------------------------|
-| `app`      | document-comments-app      | Next.js 16 (Standalone, Host-Port 7070 → Container 3000)|
-| `mongodb`  | document-comments-mongo    | MongoDB 7 (Host-Port 27018 → Container 27017, persistentes Volume)|
+| `app`      | document-comments-app      | Next.js 16 (standalone, host port 7070 → container 3000)|
+| `mongodb`  | document-comments-mongo    | MongoDB 7 (host port 27018 → container 27017, persistent volume)|
 
-- MongoDB-Daten werden in einem Docker-Volume (`mongo-data`) gespeichert und überleben Neustarts.
-- Die App wartet auf den MongoDB-Healthcheck, bevor sie startet.
-- Beide Container starten automatisch neu (`unless-stopped`).
+- MongoDB data is stored in a Docker volume (`mongo-data`) and survives restarts.
+- The app waits for the MongoDB healthcheck before starting.
+- Both containers restart automatically (`unless-stopped`).
 
 ---
 
-## Hinweis zu Next.js 16
+## Note on Next.js 16
 
-Dieses Projekt nutzt Next.js 16-Muster: `proxy.ts` statt `middleware.ts`, async `cookies()`, App Router.
+This project uses Next.js 16 patterns: `proxy.ts` instead of `middleware.ts`, async `cookies()`, App Router.
 
-Falls `npm install` mit `^16.0.0` fehlschlägt:
+If `npm install` fails with `^16.0.0`:
 ```json
 "next": "^15.3.0"
 ```
-Alle Patterns sind mit Next.js 15 identisch.
+All patterns are identical to Next.js 15.
