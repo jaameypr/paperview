@@ -5,8 +5,9 @@ import { getAuthFromCookie, COOKIE_NAME } from "@/lib/auth";
 import { getAccessLevel, hasAccess } from "@/lib/access";
 import { saveFile, readFile } from "@/lib/storage";
 import { emit, shareChannel } from "@/lib/sse";
-import Share from "@/models/Share";
+import { getKindFromExtension } from "@/types/share";
 import ShareVersion from "@/models/ShareVersion";
+import Share from "@/models/Share";
 
 export async function GET(
   _request: NextRequest,
@@ -121,11 +122,15 @@ export async function POST(
     });
 
     share.currentVersionId = version._id as typeof share.currentVersionId;
+    if (!restoreFromId) {
+      share.kind = getKindFromExtension(originalFilename);
+    }
     await share.save();
 
     emit(shareChannel(id), "version:created", {
       versionId: String(version._id),
       versionNumber: nextNumber,
+      kind: share.kind,
     });
 
     return NextResponse.json(

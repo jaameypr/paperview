@@ -56,6 +56,7 @@ export default function CommentPanel({
   const [replyText, setReplyText] = useState("");
   const [filter, setFilter] = useState<"all" | "open" | "resolved">("all");
   const [pageFilter, setPageFilter] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
   const textRef = useRef<HTMLTextAreaElement>(null);
 
   const isPdf = shareKind === "pdf";
@@ -138,10 +139,9 @@ export default function CommentPanel({
   }
 
   async function handleDelete(id: string) {
-    if (!confirm("Delete this comment?")) return;
     try {
       const res = await fetch(`${apiBase}/${id}`, { method: "DELETE" });
-      if (res.ok) onCommentDeleted(id);
+      if (res.ok) { onCommentDeleted(id); setConfirmDelete(null); }
     } catch { /* */ }
   }
 
@@ -270,29 +270,50 @@ export default function CommentPanel({
 
                 {/* Actions */}
                 <div className="px-3 pb-2.5 flex items-center gap-1 flex-wrap" onClick={(e) => e.stopPropagation()}>
-                  <button
-                    onClick={() => setReplyingTo(replyingTo === comment._id ? null : comment._id)}
-                    className="text-xs text-gray-500 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/20 px-2 py-1 rounded-md transition-colors"
-                  >
-                    Reply{comment.replies.length > 0 ? ` (${comment.replies.length})` : ""}
-                  </button>
-                  <button
-                    onClick={() => handleResolve(comment._id, !comment.resolved)}
-                    className={`text-xs px-2 py-1 rounded-md transition-colors ${
-                      comment.resolved
-                        ? "text-gray-500 hover:text-orange-600 hover:bg-orange-50 dark:hover:bg-orange-900/20"
-                        : "text-gray-500 hover:text-green-600 hover:bg-green-50 dark:hover:bg-green-900/20"
-                    }`}
-                  >
-                    {comment.resolved ? "Reopen" : "Resolve"}
-                  </button>
-                  <div className="flex-1" />
-                  <button
-                    onClick={() => handleDelete(comment._id)}
-                    className="text-xs text-gray-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 px-2 py-1 rounded-md transition-colors"
-                  >
-                    Delete
-                  </button>
+                  {confirmDelete === comment._id ? (
+                    <>
+                      <span className="text-xs text-gray-500 dark:text-gray-400">Delete this comment?</span>
+                      <div className="flex-1" />
+                      <button
+                        onClick={() => setConfirmDelete(null)}
+                        className="text-xs text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 px-2 py-1 rounded-md transition-colors"
+                      >
+                        Cancel
+                      </button>
+                      <button
+                        onClick={() => handleDelete(comment._id)}
+                        className="text-xs text-white bg-red-500 hover:bg-red-600 px-2 py-1 rounded-md transition-colors"
+                      >
+                        Delete
+                      </button>
+                    </>
+                  ) : (
+                    <>
+                      <button
+                        onClick={() => setReplyingTo(replyingTo === comment._id ? null : comment._id)}
+                        className="text-xs text-gray-500 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/20 px-2 py-1 rounded-md transition-colors"
+                      >
+                        Reply{comment.replies.length > 0 ? ` (${comment.replies.length})` : ""}
+                      </button>
+                      <button
+                        onClick={() => handleResolve(comment._id, !comment.resolved)}
+                        className={`text-xs px-2 py-1 rounded-md transition-colors ${
+                          comment.resolved
+                            ? "text-gray-500 hover:text-orange-600 hover:bg-orange-50 dark:hover:bg-orange-900/20"
+                            : "text-gray-500 hover:text-green-600 hover:bg-green-50 dark:hover:bg-green-900/20"
+                        }`}
+                      >
+                        {comment.resolved ? "Reopen" : "Resolve"}
+                      </button>
+                      <div className="flex-1" />
+                      <button
+                        onClick={() => setConfirmDelete(comment._id)}
+                        className="text-xs text-gray-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 px-2 py-1 rounded-md transition-colors"
+                      >
+                        Delete
+                      </button>
+                    </>
+                  )}
                 </div>
 
                 {/* Replies */}

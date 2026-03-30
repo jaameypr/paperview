@@ -11,7 +11,7 @@ import {
 import { Document, Page, pdfjs } from "react-pdf";
 import "react-pdf/dist/esm/Page/AnnotationLayer.css";
 import "react-pdf/dist/esm/Page/TextLayer.css";
-import type { Comment, SelectionEvent, HighlightRect } from "@/types/comment";
+import type { Comment, SelectionData, SelectionEvent, HighlightRect } from "@/types/comment";
 
 pdfjs.GlobalWorkerOptions.workerSrc = `//unpkg.com/pdfjs-dist@${pdfjs.version}/build/pdf.worker.min.mjs`;
 
@@ -23,6 +23,7 @@ interface PdfViewerProps {
   contentUrl: string;
   comments?: Comment[];
   activeCommentId?: string | null;
+  pendingSelection?: SelectionData | null;
   onPageChange?: (page: number) => void;
   onTotalPagesChange?: (total: number) => void;
   onSelection?: (event: SelectionEvent) => void;
@@ -37,13 +38,14 @@ function highlightColor(isActive: boolean, resolved: boolean): string {
 
 const PdfViewer = forwardRef<PdfViewerHandle, PdfViewerProps>(
   function PdfViewer(
-    { contentUrl, comments = [], activeCommentId = null, onPageChange, onTotalPagesChange, onSelection, onHighlightClick },
+    { contentUrl, comments = [], activeCommentId = null, pendingSelection = null, onPageChange, onTotalPagesChange, onSelection, onHighlightClick },
     ref
   ) {
     const [numPages, setNumPages] = useState(0);
     const [currentPage, setCurrentPage] = useState(1);
     const [scale, setScale] = useState(1.2);
-    const [pageWidth, setPageWidth] = useState(680);
+    const [baseWidth, setBaseWidth] = useState(680);
+    const pageWidth = Math.round(baseWidth * scale);
 
     const scrollRef = useRef<HTMLDivElement>(null);
     const pageVisibilitiesRef = useRef<Map<number, number>>(new Map());
@@ -61,7 +63,7 @@ const PdfViewer = forwardRef<PdfViewerHandle, PdfViewerProps>(
     useEffect(() => {
       const container = scrollRef.current;
       if (!container) return;
-      const update = () => setPageWidth(Math.min(container.clientWidth - 32, 820));
+      const update = () => setBaseWidth(Math.min(container.clientWidth - 32, 820));
       update();
       const ro = new ResizeObserver(update);
       ro.observe(container);
@@ -275,6 +277,10 @@ const PdfViewer = forwardRef<PdfViewerHandle, PdfViewerProps>(
                   if (rects.length > 0) pageHighlights.push({ commentId: c._id, rects, resolved: c.resolved });
                 }
 
+                const pendingRects = pendingSelection?.highlightRects?.filter(
+                  (r) => r.page === pageNum && r.width > 0 && r.height > 0
+                ) ?? [];
+
                 return (
                   <div
                     key={`${pageNum}-${scale}`}
@@ -286,7 +292,6 @@ const PdfViewer = forwardRef<PdfViewerHandle, PdfViewerProps>(
                     <Page
                       pageNumber={pageNum}
                       width={pageWidth}
-                      scale={scale}
                       renderTextLayer={true}
                       renderAnnotationLayer={true}
                       loading={
@@ -315,6 +320,26 @@ const PdfViewer = forwardRef<PdfViewerHandle, PdfViewerProps>(
                             />
                           ))
                         )}
+                      </div>
+                    )}
+
+                    {/* Pending selection overlay */}
+                    {pendingRects.length > 0 && (
+                      <div className="absolute inset-0 pointer-events-none overflow-hidden">
+                        {pendingRects.map((rect, ri) => (
+                          <div
+                            key={`pending-${ri}`}
+                            className="absolute"
+                            style={{
+                              left: `${rect.x}%`,
+                              top: `${rect.y}%`,
+                              width: `${rect.width}%`,
+                              height: `${rect.height}%`,
+                              backgroundColor: "rgba(59,130,246,0.35)",
+                              mixBlendMode: "multiply",
+                            }}
+                          />
+                        ))}
                       </div>
                     )}
                   </div>

@@ -36,12 +36,6 @@ type InputMode = "file" | "code" | "text";
 export default function NewSharePage() {
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
-  const [visibility, setVisibility] = useState("private");
-  const [password, setPassword] = useState("");
-  const [expiresAt, setExpiresAt] = useState("");
-  const [commentsEnabled, setCommentsEnabled] = useState(true);
-  const [downloadEnabled, setDownloadEnabled] = useState(true);
-  const [previewMode, setPreviewMode] = useState("viewer_comments");
   const [changeNote, setChangeNote] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -88,12 +82,6 @@ export default function NewSharePage() {
     const formData = new FormData();
     formData.append("title", title.trim());
     formData.append("description", description.trim());
-    formData.append("visibility", visibility);
-    if (visibility === "public_password" && password) formData.append("password", password);
-    if (expiresAt) formData.append("expiresAt", new Date(expiresAt).toISOString());
-    formData.append("commentsEnabled", String(commentsEnabled));
-    formData.append("downloadEnabled", String(downloadEnabled));
-    formData.append("previewMode", previewMode);
     formData.append("changeNote", changeNote.trim());
 
     if (inputMode === "file") {
@@ -297,83 +285,12 @@ export default function NewSharePage() {
             />
           </div>
 
-          {/* Visibility */}
-          <div>
-            <label className={labelClass}>Visibility</label>
-            <select
-              value={visibility}
-              onChange={(e) => setVisibility(e.target.value)}
-              className={inputClass}
-            >
-              <option value="private">Private — Only collaborators</option>
-              <option value="public">Public — Anyone with the link</option>
-              <option value="public_password">Password Protected — Link + password</option>
-            </select>
-          </div>
-
-          {visibility === "public_password" && (
-            <div>
-              <label className={labelClass}>Share Password</label>
-              <input
-                type="password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                placeholder="Password for share access"
-                className={inputClass}
-              />
-            </div>
-          )}
-
-          {/* Expiration */}
-          <div>
-            <label className={labelClass}>Expiration (optional)</label>
-            <input
-              type="datetime-local"
-              value={expiresAt}
-              onChange={(e) => setExpiresAt(e.target.value)}
-              className={inputClass}
-            />
-          </div>
-
-          {/* Options */}
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className={labelClass}>Preview Mode</label>
-              <select
-                value={previewMode}
-                onChange={(e) => setPreviewMode(e.target.value)}
-                className={inputClass}
-              >
-                <option value="viewer_comments">Viewer + Comments</option>
-                <option value="viewer">Viewer Only</option>
-                <option value="download_only">Download Only</option>
-              </select>
-            </div>
-            <div className="flex flex-col gap-3 pt-6">
-              <label className="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300">
-                <input
-                  type="checkbox"
-                  checked={commentsEnabled}
-                  onChange={(e) => setCommentsEnabled(e.target.checked)}
-                  className="rounded"
-                />
-                Comments enabled
-              </label>
-              <label className="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300">
-                <input
-                  type="checkbox"
-                  checked={downloadEnabled}
-                  onChange={(e) => setDownloadEnabled(e.target.checked)}
-                  className="rounded"
-                />
-                Downloads enabled
-              </label>
-            </div>
-          </div>
-
           {/* Change note */}
           <div>
-            <label className={labelClass}>Version Note (optional)</label>
+            <label className={labelClass}>
+              Version note{" "}
+              <span className="text-gray-400 dark:text-gray-500 font-normal">— optional</span>
+            </label>
             <input
               type="text"
               value={changeNote}
