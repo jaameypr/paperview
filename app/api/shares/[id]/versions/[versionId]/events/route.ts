@@ -1,7 +1,7 @@
 import { NextRequest } from "next/server";
 import { cookies } from "next/headers";
 import { connectToDatabase } from "@/lib/mongodb";
-import { getAuthFromCookie, COOKIE_NAME } from "@/lib/auth";
+import { getRequestAuth } from "@/lib/apiAuth";
 import { getAccessLevel, hasAccess } from "@/lib/access";
 import { subscribe, shareVersionChannel } from "@/lib/sse";
 import Share from "@/models/Share";
@@ -9,12 +9,12 @@ import Share from "@/models/Share";
 export const dynamic = "force-dynamic";
 
 export async function GET(
-  _request: NextRequest,
+  request: NextRequest,
   { params }: { params: Promise<{ id: string; versionId: string }> }
 ) {
   const { id, versionId } = await params;
+  const auth = await getRequestAuth(request);
   const cookieStore = await cookies();
-  const auth = getAuthFromCookie(cookieStore.get(COOKIE_NAME)?.value);
 
   await connectToDatabase();
   const share = await Share.findById(id);
@@ -55,8 +55,7 @@ export async function GET(
         }
       }, 30000);
 
-      // Cleanup on close
-      _request.signal.addEventListener("abort", () => {
+      request.signal.addEventListener("abort", () => {
         clearInterval(interval);
         unsubscribe();
         try { controller.close(); } catch { /* already closed */ }

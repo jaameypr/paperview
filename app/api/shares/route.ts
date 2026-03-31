@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
-import { cookies } from "next/headers";
 import { connectToDatabase } from "@/lib/mongodb";
-import { getAuthFromCookie, COOKIE_NAME, hashSharePassword } from "@/lib/auth";
+import { hashSharePassword } from "@/lib/auth";
+import { getRequestAuth } from "@/lib/apiAuth";
 import { saveFile } from "@/lib/storage";
 import Share from "@/models/Share";
 import ShareVersion from "@/models/ShareVersion";
@@ -10,10 +10,9 @@ import User from "@/models/User";
 import { getKindFromExtension } from "@/types/share";
 import { bootstrapAdmin } from "@/lib/bootstrap";
 
-export async function GET() {
+export async function GET(request: NextRequest) {
   try {
-    const cookieStore = await cookies();
-    const auth = getAuthFromCookie(cookieStore.get(COOKIE_NAME)?.value);
+    const auth = await getRequestAuth(request);
     if (!auth) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
     await connectToDatabase();
@@ -63,8 +62,7 @@ export async function GET() {
 
 export async function POST(request: NextRequest) {
   try {
-    const cookieStore = await cookies();
-    const auth = getAuthFromCookie(cookieStore.get(COOKIE_NAME)?.value);
+    const auth = await getRequestAuth(request);
     if (!auth) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
     await connectToDatabase();
@@ -97,12 +95,18 @@ export async function POST(request: NextRequest) {
     let originalFilename: string;
 
     if (file) {
+      if (file.size > 200 * 1024 * 1024) {
+        return NextResponse.json({ error: "File too large (max 200 MB)" }, { status: 413 });
+      }
       kind = getKindFromExtension(file.name);
       const buffer = Buffer.from(await file.arrayBuffer());
       ({ storageKey, checksum, size } = await saveFile(buffer, file.name));
       contentType = file.type || "application/octet-stream";
       originalFilename = file.name;
     } else if (textContent !== null && textFilename) {
+      if (Buffer.byteLength(textContent, "utf-8") > 10 * 1024 * 1024) {
+        return NextResponse.json({ error: "Content too large (max 10 MB)" }, { status: 413 });
+      }
       kind = getKindFromExtension(textFilename);
       const buffer = Buffer.from(textContent, "utf-8");
       ({ storageKey, checksum, size } = await saveFile(buffer, textFilename));

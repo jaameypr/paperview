@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { readFile as readFileFromDisk } from "fs/promises";
 import { connectToDatabase } from "@/lib/mongodb";
-import { getAuthFromCookie, COOKIE_NAME } from "@/lib/auth";
+import { getRequestAuth } from "@/lib/apiAuth";
 import { getAccessLevel, hasAccess, isExpired } from "@/lib/access";
 import { getFilePath, readFileAsText } from "@/lib/storage";
 import Share from "@/models/Share";
@@ -14,8 +14,8 @@ export async function GET(
 ) {
   try {
     const { id, versionId } = await params;
+    const auth = await getRequestAuth(request);
     const cookieStore = await cookies();
-    const auth = getAuthFromCookie(cookieStore.get(COOKIE_NAME)?.value);
 
     await connectToDatabase();
 
@@ -61,17 +61,24 @@ export async function GET(
             "Content-Range": `bytes ${start}-${end}/${buffer.length}`,
             "Accept-Ranges": "bytes",
             "Content-Length": String(chunk.length),
+            "X-Content-Type-Options": "nosniff",
           },
         });
       }
     }
 
+    // Prevent XSS: SVG files must be served as plain text, not as image/svg+xml
+    const safeContentType = version.contentType === "image/svg+xml"
+      ? "text/plain; charset=utf-8"
+      : version.contentType;
+
     return new NextResponse(buffer, {
       headers: {
-        "Content-Type": version.contentType,
+        "Content-Type": safeContentType,
         "Content-Disposition": "inline",
         "Content-Length": String(buffer.length),
         "Accept-Ranges": "bytes",
+        "X-Content-Type-Options": "nosniff",
       },
     });
   } catch (err) {

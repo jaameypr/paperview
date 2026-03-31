@@ -10,13 +10,28 @@ import { Textarea } from "@/components/ui/textarea";
 import {
   Select,
   SelectContent,
+  SelectGroup,
   SelectItem,
+  SelectLabel,
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
 
-const CODE_EXTENSIONS = [
+const TEXT_FORMATS = [
+  { ext: "txt", label: "Plain Text" },
+  { ext: "md", label: "Markdown" },
+  { ext: "json", label: "JSON" },
+  { ext: "yaml", label: "YAML" },
+  { ext: "xml", label: "XML" },
+  { ext: "toml", label: "TOML" },
+  { ext: "csv", label: "CSV" },
+  { ext: "log", label: "Log" },
+  { ext: "env", label: "Env" },
+  { ext: "conf", label: "Config" },
+];
+
+const CODE_LANGUAGES = [
   { ext: "js", label: "JavaScript" }, { ext: "ts", label: "TypeScript" },
   { ext: "jsx", label: "JSX" }, { ext: "tsx", label: "TSX" },
   { ext: "py", label: "Python" }, { ext: "java", label: "Java" },
@@ -30,20 +45,12 @@ const CODE_EXTENSIONS = [
   { ext: "scss", label: "SCSS" },
 ];
 
-const TEXT_EXTENSIONS = [
-  { ext: "txt", label: "Plain Text" },
-  { ext: "md", label: "Markdown" },
-  { ext: "json", label: "JSON" },
-  { ext: "yaml", label: "YAML" },
-  { ext: "xml", label: "XML" },
-  { ext: "toml", label: "TOML" },
-  { ext: "csv", label: "CSV" },
-  { ext: "log", label: "Log" },
-  { ext: "env", label: "Env" },
-  { ext: "conf", label: "Config" },
-];
+const MONO_EXTENSIONS = new Set([
+  ...CODE_LANGUAGES.map((l) => l.ext),
+  "json", "yaml", "xml", "toml", "csv", "env", "conf",
+]);
 
-type InputMode = "file" | "code" | "text";
+type InputMode = "file" | "paste";
 
 export default function NewSharePage() {
   const [title, setTitle] = useState("");
@@ -83,7 +90,7 @@ export default function NewSharePage() {
       setError("Please select a file.");
       return;
     }
-    if ((inputMode === "code" || inputMode === "text") && !pasteContent.trim()) {
+    if (inputMode === "paste" && !pasteContent.trim()) {
       setError("Please enter some content.");
       return;
     }
@@ -120,7 +127,7 @@ export default function NewSharePage() {
 
   const canSubmit = title.trim() && (
     (inputMode === "file" && file) ||
-    ((inputMode === "code" || inputMode === "text") && pasteContent.trim())
+    (inputMode === "paste" && pasteContent.trim())
   );
 
   return (
@@ -135,8 +142,7 @@ export default function NewSharePage() {
             <div className="flex bg-muted rounded-lg p-1 gap-1">
               {([
                 { mode: "file" as const, label: "Upload File", icon: "📎" },
-                { mode: "code" as const, label: "Paste Code", icon: "💻" },
-                { mode: "text" as const, label: "Paste Text", icon: "📝" },
+                { mode: "paste" as const, label: "Paste Text", icon: "📋" },
               ]).map(({ mode, label, icon }) => (
                 <button
                   key={mode}
@@ -178,93 +184,55 @@ export default function NewSharePage() {
             </div>
           )}
 
-          {/* Code paste */}
-          {inputMode === "code" && (
+          {/* Paste */}
+          {inputMode === "paste" && (
             <>
               <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-1.5">
-                  <Label>Language <span className="text-destructive">*</span></Label>
+                  <Label>Language / Format <span className="text-destructive">*</span></Label>
                   <Select value={pasteExtension} onValueChange={(v) => v && setPasteExtension(v)}>
                     <SelectTrigger className="w-full">
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      {CODE_EXTENSIONS.map((l) => (
-                        <SelectItem key={l.ext} value={l.ext}>{l.label} (.{l.ext})</SelectItem>
-                      ))}
+                      <SelectGroup>
+                        <SelectLabel>Text &amp; Data</SelectLabel>
+                        {TEXT_FORMATS.map((t) => (
+                          <SelectItem key={t.ext} value={t.ext}>{t.label} (.{t.ext})</SelectItem>
+                        ))}
+                      </SelectGroup>
+                      <SelectGroup>
+                        <SelectLabel>Code</SelectLabel>
+                        {CODE_LANGUAGES.map((l) => (
+                          <SelectItem key={l.ext} value={l.ext}>{l.label} (.{l.ext})</SelectItem>
+                        ))}
+                      </SelectGroup>
                     </SelectContent>
                   </Select>
                 </div>
                 <div className="space-y-1.5">
-                  <Label htmlFor="paste-filename-code">Filename <span className="text-muted-foreground font-normal">— optional</span></Label>
+                  <Label htmlFor="paste-filename">Filename <span className="text-muted-foreground font-normal">— optional</span></Label>
                   <Input
-                    id="paste-filename-code"
+                    id="paste-filename"
                     value={pasteFilename}
                     onChange={(e) => {
                       setPasteFilename(e.target.value);
                       if (e.target.value.trim() && !title.trim()) setTitle(e.target.value.trim().replace(/\.[^.]+$/, ""));
                     }}
-                    placeholder={`e.g. main.${pasteExtension}`}
+                    placeholder={`e.g. untitled.${pasteExtension}`}
                   />
                 </div>
               </div>
               <div className="space-y-1.5">
-                <Label htmlFor="code-content">Code <span className="text-destructive">*</span></Label>
+                <Label htmlFor="paste-content">Content <span className="text-destructive">*</span></Label>
                 <Textarea
-                  id="code-content"
+                  id="paste-content"
                   value={pasteContent}
                   onChange={(e) => setPasteContent(e.target.value)}
                   rows={12}
-                  placeholder="Paste your code here…"
+                  placeholder="Paste your content here…"
                   spellCheck={false}
-                  className="font-mono text-xs resize-y"
-                />
-              </div>
-            </>
-          )}
-
-          {/* Text/markdown paste */}
-          {inputMode === "text" && (
-            <>
-              <div className="grid grid-cols-2 gap-3">
-                <div className="space-y-1.5">
-                  <Label>Format <span className="text-destructive">*</span></Label>
-                  <Select value={pasteExtension} onValueChange={(v) => v && setPasteExtension(v)}>
-                    <SelectTrigger className="w-full">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {TEXT_EXTENSIONS.map((t) => (
-                        <SelectItem key={t.ext} value={t.ext}>{t.label} (.{t.ext})</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="space-y-1.5">
-                  <Label htmlFor="paste-filename-text">Filename <span className="text-muted-foreground font-normal">— optional</span></Label>
-                  <Input
-                    id="paste-filename-text"
-                    value={pasteFilename}
-                    onChange={(e) => {
-                      setPasteFilename(e.target.value);
-                      if (e.target.value.trim() && !title.trim()) setTitle(e.target.value.trim().replace(/\.[^.]+$/, ""));
-                    }}
-                    placeholder={`e.g. notes.${pasteExtension}`}
-                  />
-                </div>
-              </div>
-              <div className="space-y-1.5">
-                <Label htmlFor="text-content">Content <span className="text-destructive">*</span></Label>
-                <Textarea
-                  id="text-content"
-                  value={pasteContent}
-                  onChange={(e) => setPasteContent(e.target.value)}
-                  rows={12}
-                  placeholder="Paste your text content here…"
-                  className={cn(
-                    "resize-y",
-                    ["json","yaml","xml","toml","csv","env","conf"].includes(pasteExtension) && "font-mono text-xs"
-                  )}
+                  className={cn("resize-y", MONO_EXTENSIONS.has(pasteExtension) && "font-mono text-xs")}
                 />
               </div>
             </>

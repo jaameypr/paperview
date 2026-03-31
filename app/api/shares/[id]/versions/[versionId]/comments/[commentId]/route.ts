@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { connectToDatabase } from "@/lib/mongodb";
-import { getAuthFromCookie, COOKIE_NAME } from "@/lib/auth";
+import { getRequestAuth } from "@/lib/apiAuth";
 import { getAccessLevel, hasAccess } from "@/lib/access";
 import { emit, shareVersionChannel } from "@/lib/sse";
 import Share from "@/models/Share";
@@ -13,8 +13,8 @@ export async function PATCH(
 ) {
   try {
     const { id, versionId, commentId } = await params;
+    const auth = await getRequestAuth(request);
     const cookieStore = await cookies();
-    const auth = getAuthFromCookie(cookieStore.get(COOKIE_NAME)?.value);
 
     await connectToDatabase();
     const share = await Share.findById(id);
@@ -28,6 +28,12 @@ export async function PATCH(
     const comment = await Comment.findById(commentId);
     if (!comment || String(comment.shareId) !== id || String(comment.shareVersionId) !== versionId) {
       return NextResponse.json({ error: "Comment not found" }, { status: 404 });
+    }
+
+    // Only owner/admin/editor can resolve any comment; commenters can only resolve their own
+    const canModifyAny = hasAccess(access, "editor");
+    if (!canModifyAny && comment.authorId && (!auth || String(comment.authorId) !== auth.userId)) {
+      return NextResponse.json({ error: "Cannot modify another user's comment" }, { status: 403 });
     }
 
     const body: unknown = await request.json();
@@ -50,13 +56,13 @@ export async function PATCH(
 }
 
 export async function DELETE(
-  _request: NextRequest,
+  request: NextRequest,
   { params }: { params: Promise<{ id: string; versionId: string; commentId: string }> }
 ) {
   try {
     const { id, versionId, commentId } = await params;
+    const auth = await getRequestAuth(request);
     const cookieStore = await cookies();
-    const auth = getAuthFromCookie(cookieStore.get(COOKIE_NAME)?.value);
 
     await connectToDatabase();
     const share = await Share.findById(id);
@@ -70,6 +76,12 @@ export async function DELETE(
     const comment = await Comment.findById(commentId);
     if (!comment || String(comment.shareId) !== id || String(comment.shareVersionId) !== versionId) {
       return NextResponse.json({ error: "Comment not found" }, { status: 404 });
+    }
+
+    // Owners/admins/editors can delete any comment; commenters can only delete their own
+    const canDeleteAny = hasAccess(access, "editor");
+    if (!canDeleteAny && comment.authorId && (!auth || String(comment.authorId) !== auth.userId)) {
+      return NextResponse.json({ error: "Cannot delete another user's comment" }, { status: 403 });
     }
 
     await comment.deleteOne();

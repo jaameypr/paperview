@@ -12,7 +12,7 @@ import { useSSE } from "@/hooks/useSSE";
 import { useAuth } from "@/hooks/useAuth";
 import { KIND_FEATURES } from "@/types/share";
 import type { ShareDTO, ShareVersionDTO } from "@/types/share";
-import type { Comment, SelectionData, SelectionEvent } from "@/types/comment";
+import type { Comment, SelectionData, SelectionEvent, LineSelectionData, LineSelectionEvent, AnySelectionData } from "@/types/comment";
 import type { PdfViewerHandle } from "@/components/viewers/pdf-viewer";
 
 const PdfViewer = dynamic(() => import("@/components/viewers/pdf-viewer"), { ssr: false });
@@ -51,7 +51,7 @@ export default function ShareDetailPage() {
   const [pdfCurrentPage, setPdfCurrentPage] = useState(1);
   const [pdfTotalPages, setPdfTotalPages] = useState(0);
   const [activeCommentId, setActiveCommentId] = useState<string | null>(null);
-  const [pendingSelection, setPendingSelection] = useState<SelectionData | null>(null);
+  const [pendingSelection, setPendingSelection] = useState<AnySelectionData | null>(null);
   const [selectionPopover, setSelectionPopover] = useState<{ top: number; left: number } | null>(null);
   const pdfViewerRef = useRef<PdfViewerHandle>(null);
   const contentAreaRef = useRef<HTMLDivElement>(null);
@@ -158,6 +158,21 @@ export default function ShareDetailPage() {
   const handlePdfSelection = useCallback((event: SelectionEvent) => {
     setPendingSelection(event.selectionData);
     // Convert viewport coords to container-relative
+    const containerRect = contentAreaRef.current?.getBoundingClientRect();
+    if (containerRect) {
+      setSelectionPopover({
+        top: event.popoverTop - containerRect.top,
+        left: event.popoverLeft - containerRect.left,
+      });
+    } else {
+      setSelectionPopover({ top: event.popoverTop, left: event.popoverLeft });
+    }
+    setShowComments(true);
+  }, []);
+
+  // Code / text selection handler
+  const handleLineSelection = useCallback((event: LineSelectionEvent) => {
+    setPendingSelection(event.selectionData);
     const containerRect = contentAreaRef.current?.getBoundingClientRect();
     if (containerRect) {
       setSelectionPopover({
@@ -406,7 +421,10 @@ export default function ShareDetailPage() {
         {/* Content area */}
         <div ref={contentAreaRef} className="flex-1 flex overflow-hidden min-h-0 relative">
           {/* Viewer */}
-          <div className="flex-1 overflow-auto" onClick={dismissPopover}>
+          <div
+            className="flex-1 overflow-auto"
+            onClick={dismissPopover}
+          >
             {hasPreview ? (
               <ViewerSwitch
                 kind={share.kind}
@@ -415,14 +433,15 @@ export default function ShareDetailPage() {
                 contentType={activeVersion?.contentType ?? ""}
                 filename={activeVersion?.originalFilename ?? ""}
                 fileSize={activeVersion?.fileSize ?? 0}
-                comments={comments}
+                comments={hasComments ? comments : []}
                 activeCommentId={activeCommentId}
-                pendingSelection={pendingSelection}
+                pendingSelection={hasComments ? pendingSelection : null}
                 pdfViewerRef={pdfViewerRef}
                 onPdfPageChange={setPdfCurrentPage}
                 onPdfTotalPages={setPdfTotalPages}
-                onPdfSelection={handlePdfSelection}
-                onHighlightClick={handleHighlightClick}
+                onPdfSelection={hasComments ? handlePdfSelection : undefined}
+                onLineSelection={hasComments ? handleLineSelection : undefined}
+                onHighlightClick={hasComments ? handleHighlightClick : undefined}
               />
             ) : (
               <div className="p-4">
@@ -436,8 +455,8 @@ export default function ShareDetailPage() {
             )}
           </div>
 
-          {/* Selection popover */}
-          {selectionPopover && (
+          {/* Selection popover (floating button after mouseup) */}
+          {hasComments && selectionPopover && (
             <button
               onClick={acceptSelection}
               className="absolute z-50 bg-blue-600 hover:bg-blue-700 text-white text-xs font-medium px-3 py-1.5 rounded-lg shadow-lg transition-colors"
@@ -495,18 +514,23 @@ export default function ShareDetailPage() {
 
 function ViewerSwitch({
   kind, contentUrl, downloadUrl, contentType, filename, fileSize,
-  comments, activeCommentId, pendingSelection, pdfViewerRef, onPdfPageChange, onPdfTotalPages, onPdfSelection, onHighlightClick,
+  comments, activeCommentId, pendingSelection, pdfViewerRef,
+  onPdfPageChange, onPdfTotalPages, onPdfSelection, onLineSelection, onHighlightClick,
 }: {
   kind: string; contentUrl: string; downloadUrl: string; contentType: string; filename: string; fileSize: number;
   comments?: Comment[];
   activeCommentId?: string | null;
-  pendingSelection?: SelectionData | null;
+  pendingSelection?: AnySelectionData | null;
   pdfViewerRef?: React.RefObject<PdfViewerHandle | null>;
   onPdfPageChange?: (page: number) => void;
   onPdfTotalPages?: (total: number) => void;
   onPdfSelection?: (event: SelectionEvent) => void;
+  onLineSelection?: (event: LineSelectionEvent) => void;
   onHighlightClick?: (commentId: string) => void;
 }) {
+  const lineSel = pendingSelection && "lineStart" in pendingSelection ? pendingSelection : null;
+  const pdfSel = pendingSelection && "page" in pendingSelection ? pendingSelection : null;
+
   switch (kind) {
     case "pdf":
       return (
@@ -515,7 +539,7 @@ function ViewerSwitch({
           contentUrl={contentUrl}
           comments={comments ?? []}
           activeCommentId={activeCommentId}
-          pendingSelection={pendingSelection}
+          pendingSelection={pdfSel}
           onPageChange={onPdfPageChange}
           onTotalPagesChange={onPdfTotalPages}
           onSelection={onPdfSelection}
@@ -523,7 +547,16 @@ function ViewerSwitch({
         />
       );
     case "code":
-      return <CodeViewer contentUrl={contentUrl} />;
+      return (
+        <CodeViewer
+          contentUrl={contentUrl}
+          comments={comments ?? []}
+          activeCommentId={activeCommentId}
+          pendingSelection={lineSel}
+          onSelection={onLineSelection}
+          onHighlightClick={onHighlightClick}
+        />
+      );
     case "image":
       return <ImageViewer contentUrl={contentUrl} />;
     case "video":
@@ -532,7 +565,16 @@ function ViewerSwitch({
       return <AudioViewer contentUrl={contentUrl} contentType={contentType} />;
     case "text":
     case "data":
-      return <TextViewer contentUrl={contentUrl} />;
+      return (
+        <TextViewer
+          contentUrl={contentUrl}
+          comments={comments ?? []}
+          activeCommentId={activeCommentId}
+          pendingSelection={lineSel}
+          onSelection={onLineSelection}
+          onHighlightClick={onHighlightClick}
+        />
+      );
     case "markdown":
       return <MarkdownViewer contentUrl={contentUrl} />;
     default:

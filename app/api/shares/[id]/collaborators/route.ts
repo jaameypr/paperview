@@ -1,20 +1,18 @@
 import { NextRequest, NextResponse } from "next/server";
-import { cookies } from "next/headers";
 import { connectToDatabase } from "@/lib/mongodb";
-import { getAuthFromCookie, COOKIE_NAME } from "@/lib/auth";
+import { getRequestAuth } from "@/lib/apiAuth";
 import { getAccessLevel, hasAccess } from "@/lib/access";
 import Share from "@/models/Share";
 import ShareCollaborator from "@/models/ShareCollaborator";
 import User from "@/models/User";
 
 export async function GET(
-  _request: NextRequest,
+  request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const { id } = await params;
-    const cookieStore = await cookies();
-    const auth = getAuthFromCookie(cookieStore.get(COOKIE_NAME)?.value);
+    const auth = await getRequestAuth(request);
     if (!auth) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
     await connectToDatabase();
@@ -54,8 +52,7 @@ export async function POST(
 ) {
   try {
     const { id } = await params;
-    const cookieStore = await cookies();
-    const auth = getAuthFromCookie(cookieStore.get(COOKIE_NAME)?.value);
+    const auth = await getRequestAuth(request);
     if (!auth) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
     await connectToDatabase();
@@ -108,8 +105,7 @@ export async function DELETE(
 ) {
   try {
     const { id } = await params;
-    const cookieStore = await cookies();
-    const auth = getAuthFromCookie(cookieStore.get(COOKIE_NAME)?.value);
+    const auth = await getRequestAuth(request);
     if (!auth) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
     await connectToDatabase();

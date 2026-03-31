@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
-import { cookies } from "next/headers";
 import { connectToDatabase } from "@/lib/mongodb";
-import { getAuthFromCookie, hashPassword, COOKIE_NAME } from "@/lib/auth";
+import { hashPassword } from "@/lib/auth";
+import { getRequestAuth } from "@/lib/apiAuth";
 import User from "@/models/User";
 
 function requireAdmin(auth: { role: string } | null) {
@@ -12,10 +12,9 @@ function requireAdmin(auth: { role: string } | null) {
 }
 
 /** GET /api/admin/users — List all users */
-export async function GET() {
+export async function GET(request: NextRequest) {
   try {
-    const cookieStore = await cookies();
-    const auth = getAuthFromCookie(cookieStore.get(COOKIE_NAME)?.value);
+    const auth = await getRequestAuth(request);
     const denied = requireAdmin(auth);
     if (denied) return denied;
 
@@ -47,8 +46,7 @@ export async function GET() {
 /** POST /api/admin/users — Create a new user */
 export async function POST(request: NextRequest) {
   try {
-    const cookieStore = await cookies();
-    const auth = getAuthFromCookie(cookieStore.get(COOKIE_NAME)?.value);
+    const auth = await getRequestAuth(request);
     const denied = requireAdmin(auth);
     if (denied) return denied;
 

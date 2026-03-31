@@ -1,15 +1,13 @@
-import { NextResponse } from "next/server";
-import { cookies } from "next/headers";
-import { getAuthFromCookie, COOKIE_NAME } from "@/lib/auth";
+import { NextRequest, NextResponse } from "next/server";
+import { getRequestAuth } from "@/lib/apiAuth";
 import { connectToDatabase } from "@/lib/mongodb";
 import { bootstrapAdmin } from "@/lib/bootstrap";
 import User from "@/models/User";
 
 /** GET /api/auth/me — Return current user info */
-export async function GET() {
+export async function GET(request: NextRequest) {
   try {
-    const cookieStore = await cookies();
-    const auth = getAuthFromCookie(cookieStore.get(COOKIE_NAME)?.value);
+    const auth = await getRequestAuth(request);
     if (!auth) {
       return NextResponse.json({ user: null });
     }

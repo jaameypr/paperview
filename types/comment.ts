@@ -23,6 +23,9 @@ export interface CodeTarget {
   lineStart: number;
   lineEnd: number;
   selectedText?: string;
+  /** Character offsets within the line (exclusive end), set for single-line selections. */
+  charStart?: number;
+  charEnd?: number;
 }
 
 /** Text/Markdown comment target */
@@ -31,6 +34,9 @@ export interface TextTarget {
   lineStart: number;
   lineEnd: number;
   selectedText?: string;
+  /** Character offsets within the line (exclusive end), set for single-line selections. */
+  charStart?: number;
+  charEnd?: number;
 }
 
 /** General comment (no specific location) */
@@ -62,7 +68,7 @@ export interface Comment {
   updatedAt: string;
 }
 
-/** Legacy support: old-style selection data */
+/** PDF selection data */
 export interface SelectionData {
   page: number;
   quote: string;
@@ -74,3 +80,22 @@ export interface SelectionEvent {
   popoverTop: number;
   popoverLeft: number;
 }
+
+/** Line-based selection data (code / text viewers) */
+export interface LineSelectionData {
+  lineStart: number;
+  lineEnd: number;
+  quote: string;
+  /** Character offsets within the line, only set for single-line selections. */
+  charStart?: number;
+  charEnd?: number;
+}
+
+export interface LineSelectionEvent {
+  selectionData: LineSelectionData;
+  popoverTop: number;
+  popoverLeft: number;
+}
+
+/** Union used by CommentPanel — accepts either PDF or line selection */
+export type AnySelectionData = SelectionData | LineSelectionData;

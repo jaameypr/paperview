@@ -1,14 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
-import { cookies } from "next/headers";
 import { connectToDatabase } from "@/lib/mongodb";
-import { getAuthFromCookie, verifyPassword, hashPassword, createAuthToken, COOKIE_NAME, COOKIE_MAX_AGE_SECONDS } from "@/lib/auth";
+import { verifyPassword, hashPassword, createAuthToken, COOKIE_NAME, COOKIE_MAX_AGE_SECONDS } from "@/lib/auth";
+import { getRequestAuth } from "@/lib/apiAuth";
 import User from "@/models/User";
 
 /** POST /api/auth/change-password — Change own password */
 export async function POST(request: NextRequest) {
   try {
-    const cookieStore = await cookies();
-    const auth = getAuthFromCookie(cookieStore.get(COOKIE_NAME)?.value);
+    const auth = await getRequestAuth(request);
     if (!auth) {
       return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
     }

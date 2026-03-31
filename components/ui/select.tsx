@@ -91,6 +91,14 @@ function SelectItem({
   )
 }
 
+function SelectGroup({ children, ...props }: SelectPrimitive.Group.Props) {
+  return (
+    <SelectPrimitive.Group {...props}>
+      {children}
+    </SelectPrimitive.Group>
+  )
+}
+
 function SelectLabel({ className, ...props }: SelectPrimitive.GroupLabel.Props) {
   return (
     <SelectPrimitive.GroupLabel
@@ -112,6 +120,7 @@ function SelectSeparator({ className, ...props }: SelectPrimitive.Separator.Prop
 export {
   Select,
   SelectContent,
+  SelectGroup,
   SelectItem,
   SelectLabel,
   SelectSeparator,

@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { connectToDatabase } from "@/lib/mongodb";
-import { getAuthFromCookie, COOKIE_NAME } from "@/lib/auth";
+import { getRequestAuth } from "@/lib/apiAuth";
 import { getAccessLevel, hasAccess } from "@/lib/access";
 import { emit, shareVersionChannel } from "@/lib/sse";
 import Share from "@/models/Share";
@@ -13,8 +13,8 @@ export async function POST(
 ) {
   try {
     const { id, versionId, commentId } = await params;
+    const auth = await getRequestAuth(request);
     const cookieStore = await cookies();
-    const auth = getAuthFromCookie(cookieStore.get(COOKIE_NAME)?.value);
 
     await connectToDatabase();
     const share = await Share.findById(id);

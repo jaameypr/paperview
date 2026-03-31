@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useRef, useEffect, FormEvent } from "react";
-import type { Comment as CommentType, SelectionData } from "@/types/comment";
+import type { Comment as CommentType, AnySelectionData, CodeTarget, TextTarget } from "@/types/comment";
 
 const AVATAR_COLORS = [
   "bg-blue-100 dark:bg-blue-900/50 text-blue-700 dark:text-blue-300",
@@ -43,7 +43,7 @@ interface Props {
   onCommentDeleted: (id: string) => void;
   onReplyAdded: (commentId: string, reply: CommentType["replies"][0]) => void;
   onCommentClick?: (commentId: string, page?: number) => void;
-  pendingSelection?: SelectionData | null;
+  pendingSelection?: AnySelectionData | null;
   onClearSelection?: () => void;
 }
 
@@ -67,13 +67,14 @@ export default function CommentPanel({
   const textRef = useRef<HTMLTextAreaElement>(null);
 
   const isPdf = shareKind === "pdf";
+  const isCode = shareKind === "code";
 
   useEffect(() => { setPage(currentPage); }, [currentPage]);
 
   // Focus text area when selection comes in
   useEffect(() => {
     if (pendingSelection) {
-      setPage(pendingSelection.page);
+      if ("page" in pendingSelection) setPage(pendingSelection.page);
       setTimeout(() => textRef.current?.focus(), 50);
     }
   }, [pendingSelection]);
@@ -96,14 +97,26 @@ export default function CommentPanel({
 
     if (isGuest) localStorage.setItem(GUEST_NAME_KEY, guestName.trim());
 
+    const lineSel = pendingSelection && "lineStart" in pendingSelection ? pendingSelection : null;
+    const pdfSel = pendingSelection && "page" in pendingSelection ? pendingSelection : null;
+
     const target = isPdf
       ? {
           type: "pdf" as const,
           page,
-          selectedText: pendingSelection?.quote,
-          highlightRects: pendingSelection?.highlightRects,
+          selectedText: pdfSel?.quote,
+          highlightRects: pdfSel?.highlightRects,
         }
-      : { type: "general" as const };
+      : lineSel
+        ? {
+            type: (isCode ? "code" : "text") as "code" | "text",
+            lineStart: lineSel.lineStart,
+            lineEnd: lineSel.lineEnd,
+            selectedText: lineSel.quote,
+            charStart: lineSel.charStart,
+            charEnd: lineSel.charEnd,
+          }
+        : { type: "general" as const };
 
     try {
       const res = await fetch(apiBase, {
@@ -224,6 +237,9 @@ export default function CommentPanel({
           filtered.map((comment) => {
             const isActive = comment._id === activeCommentId;
             const pdfTarget = comment.target.type === "pdf" ? comment.target : null;
+            const lineTarget = (comment.target.type === "code" || comment.target.type === "text")
+              ? comment.target as CodeTarget | TextTarget
+              : null;
 
             return (
               <div
@@ -258,6 +274,13 @@ export default function CommentPanel({
                             p. {pdfTarget.page}
                           </span>
                         )}
+                        {lineTarget && (
+                          <span className="text-[10px] bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-400 rounded px-1.5 py-0.5">
+                            {lineTarget.lineStart === lineTarget.lineEnd
+                              ? `L${lineTarget.lineStart}`
+                              : `L${lineTarget.lineStart}–${lineTarget.lineEnd}`}
+                          </span>
+                        )}
                         {comment.resolved && (
                           <span className="text-[10px] bg-green-100 dark:bg-green-900/40 text-green-700 dark:text-green-400 rounded px-1.5 py-0.5 flex items-center gap-0.5">
                             <svg className="w-2.5 h-2.5" fill="currentColor" viewBox="0 0 20 20">
@@ -271,14 +294,19 @@ export default function CommentPanel({
                             ▐ Highlight
                           </span>
                         ) : null}
+                        {lineTarget?.selectedText ? (
+                          <span className="text-[10px] bg-yellow-50 dark:bg-yellow-900/20 text-yellow-600 dark:text-yellow-400 rounded px-1.5 py-0.5">
+                            ▐ Selection
+                          </span>
+                        ) : null}
                       </div>
                     </div>
                   </div>
 
-                  {pdfTarget?.selectedText && (
+                  {(pdfTarget?.selectedText || lineTarget?.selectedText) && (
                     <div className="mb-2 ml-9 border-l-2 border-yellow-300 dark:border-yellow-600 pl-2">
                       <p className="text-xs text-gray-500 dark:text-gray-400 italic line-clamp-2">
-                        {pdfTarget.selectedText}
+                        {pdfTarget?.selectedText ?? lineTarget?.selectedText}
                       </p>
                     </div>
                   )}

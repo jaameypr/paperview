@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { connectToDatabase } from "@/lib/mongodb";
-import { getAuthFromCookie, COOKIE_NAME } from "@/lib/auth";
+import { getRequestAuth } from "@/lib/apiAuth";
 import { getAccessLevel, hasAccess } from "@/lib/access";
 import { saveFile, readFile } from "@/lib/storage";
 import { emit, shareChannel } from "@/lib/sse";
@@ -10,13 +10,13 @@ import ShareVersion from "@/models/ShareVersion";
 import Share from "@/models/Share";
 
 export async function GET(
-  _request: NextRequest,
+  request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const { id } = await params;
+    const auth = await getRequestAuth(request);
     const cookieStore = await cookies();
-    const auth = getAuthFromCookie(cookieStore.get(COOKIE_NAME)?.value);
 
     await connectToDatabase();
     const share = await Share.findById(id);
@@ -53,8 +53,7 @@ export async function POST(
 ) {
   try {
     const { id } = await params;
-    const cookieStore = await cookies();
-    const auth = getAuthFromCookie(cookieStore.get(COOKIE_NAME)?.value);
+    const auth = await getRequestAuth(request);
     if (!auth) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
     await connectToDatabase();
@@ -97,6 +96,9 @@ export async function POST(
     } else {
       const file = formData.get("file") as File | null;
       if (!file) return NextResponse.json({ error: "File is required" }, { status: 400 });
+      if (file.size > 200 * 1024 * 1024) {
+        return NextResponse.json({ error: "File too large (max 200 MB)" }, { status: 413 });
+      }
 
       const buffer = Buffer.from(await file.arrayBuffer());
       const saved = await saveFile(buffer, file.name);

@@ -10,7 +10,7 @@ import { NextRequest, NextResponse } from "next/server";
 export const AUTH_COOKIE_NAME = "pv_auth";
 
 /** Paths that require authentication */
-const PROTECTED_PATHS = ["/dashboard", "/shares/new", "/admin", "/change-password"];
+const PROTECTED_PATHS = ["/dashboard", "/shares/new", "/admin", "/change-password", "/settings"];
 const PROTECTED_API_PATHS = ["/api/admin"];
 
 /** Paths that are always public */
@@ -95,6 +95,12 @@ export async function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
   if (!isProtectedPath(pathname)) {
+    return NextResponse.next();
+  }
+
+  // Let API key requests through — route handlers verify the key
+  const authHeader = request.headers.get("authorization") ?? "";
+  if (authHeader.startsWith("Bearer pv_")) {
     return NextResponse.next();
   }
 
