@@ -29,3 +29,7 @@ yarn-debug.log*
 yarn-error.log*
 *.tsbuildinfo
 README.md
+
+# file storage (runtime data, not part of image)
+storage/
+protected-assets/

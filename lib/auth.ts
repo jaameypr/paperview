@@ -1,13 +1,16 @@
 /**
- * lib/auth.ts — Auth utilities for Node.js runtime (server components, route handlers).
+ * lib/auth.ts — User-based authentication utilities.
  *
- * Uses Node.js crypto for HMAC creation and verification.
  * Token format: `<base64url(JSON payload)>.<base64url(HMAC-SHA256)>`
+ * Payload carries userId, username, role, mustChangePassword.
  */
 
 import crypto from "crypto";
+import bcrypt from "bcryptjs";
+import type { AuthTokenPayload, UserRole } from "@/types/user";
 
-export const COOKIE_NAME = "doc_auth";
+export const COOKIE_NAME = "pv_auth";
+const BCRYPT_ROUNDS = 12;
 
 /** 7 days in milliseconds */
 const TOKEN_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000;
@@ -17,27 +20,39 @@ export const COOKIE_MAX_AGE_SECONDS = 7 * 24 * 60 * 60;
 
 function getSecret(): string {
   const secret = process.env.AUTH_SECRET;
-  if (!secret) {
-    throw new Error("AUTH_SECRET environment variable is not set");
-  }
+  if (!secret) throw new Error("AUTH_SECRET environment variable is not set");
   return secret;
 }
 
-/**
- * Create a signed auth token.
- * Payload contains issued-at and expiry timestamps.
- */
-export function createAuthToken(): string {
+// ── Password hashing ──────────────────────────────────────────────────
+
+export function hashPassword(password: string): Promise<string> {
+  return bcrypt.hash(password, BCRYPT_ROUNDS);
+}
+
+export function verifyPassword(password: string, hash: string): Promise<boolean> {
+  return bcrypt.compare(password, hash);
+}
+
+// ── Token creation & verification ─────────────────────────────────────
+
+export function createAuthToken(user: {
+  _id: string;
+  username: string;
+  role: UserRole;
+  mustChangePassword: boolean;
+}): string {
   const now = Date.now();
-  const payload = {
+  const payload: AuthTokenPayload = {
+    userId: String(user._id),
+    username: user.username,
+    role: user.role,
+    mustChangePassword: user.mustChangePassword,
     iat: now,
     exp: now + TOKEN_MAX_AGE_MS,
   };
 
-  const encodedPayload = Buffer.from(JSON.stringify(payload)).toString(
-    "base64url"
-  );
-
+  const encodedPayload = Buffer.from(JSON.stringify(payload)).toString("base64url");
   const secret = getSecret();
   const hmac = crypto
     .createHmac("sha256", secret)
@@ -47,19 +62,14 @@ export function createAuthToken(): string {
   return `${encodedPayload}.${hmac}`;
 }
 
-/**
- * Verify a token produced by createAuthToken().
- * Uses timing-safe comparison to prevent timing attacks.
- */
-export function verifyAuthToken(token: string): boolean {
+export function verifyAuthToken(token: string): AuthTokenPayload | null {
   try {
     const dotIndex = token.lastIndexOf(".");
-    if (dotIndex === -1) return false;
+    if (dotIndex === -1) return null;
 
     const encodedPayload = token.slice(0, dotIndex);
     const hmac = token.slice(dotIndex + 1);
-
-    if (!encodedPayload || !hmac) return false;
+    if (!encodedPayload || !hmac) return null;
 
     const secret = getSecret();
     const expectedHmac = crypto
@@ -67,31 +77,38 @@ export function verifyAuthToken(token: string): boolean {
       .update(encodedPayload)
       .digest("base64url");
 
-    // Timing-safe comparison
     const hmacBuf = Buffer.from(hmac);
     const expectedBuf = Buffer.from(expectedHmac);
+    if (hmacBuf.length !== expectedBuf.length) return null;
+    if (!crypto.timingSafeEqual(hmacBuf, expectedBuf)) return null;
 
-    if (hmacBuf.length !== expectedBuf.length) return false;
-    if (!crypto.timingSafeEqual(hmacBuf, expectedBuf)) return false;
+    const payloadJson = Buffer.from(encodedPayload, "base64url").toString("utf-8");
+    const payload = JSON.parse(payloadJson) as AuthTokenPayload;
+    if (payload.exp && Date.now() > payload.exp) return null;
 
-    // Check expiry
-    const payloadJson = Buffer.from(encodedPayload, "base64url").toString(
-      "utf-8"
-    );
-    const payload = JSON.parse(payloadJson) as { exp?: number };
-    if (payload.exp && Date.now() > payload.exp) return false;
-
-    return true;
+    return payload;
   } catch {
-    return false;
+    return null;
   }
 }
 
-/**
- * Check whether the given cookie value represents an authenticated session.
- * Safe to call with undefined (returns false).
- */
-export function isAuthenticated(token: string | undefined): boolean {
-  if (!token) return false;
+/** Get the authenticated user payload from a cookie value, or null. */
+export function getAuthFromCookie(token: string | undefined): AuthTokenPayload | null {
+  if (!token) return null;
   return verifyAuthToken(token);
+}
+
+/** Legacy compat: returns true if token is valid */
+export function isAuthenticated(token: string | undefined): boolean {
+  return getAuthFromCookie(token) !== null;
+}
+
+// ── Share password hashing ────────────────────────────────────────────
+
+export function hashSharePassword(password: string): Promise<string> {
+  return bcrypt.hash(password, 10);
+}
+
+export function verifySharePassword(password: string, hash: string): Promise<boolean> {
+  return bcrypt.compare(password, hash);
 }

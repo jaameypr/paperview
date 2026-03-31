@@ -2,14 +2,17 @@ services:
   # ── Next.js application ──────────────────────────────────────────────
   app:
     build: .
-    container_name: document-comments-app
+    container_name: paperview-app
     restart: unless-stopped
     ports:
       - "7070:3000"
     environment:
-      - MONGODB_URI=mongodb://mongodb:27017/document-comments
-      - DOC_PASSWORD=${DOC_PASSWORD:?DOC_PASSWORD is required}
+      - MONGODB_URI=mongodb://mongodb:27017/paperview
       - AUTH_SECRET=${AUTH_SECRET:?AUTH_SECRET is required}
+      - INITIAL_ADMIN_USERNAME=${INITIAL_ADMIN_USERNAME:-admin}
+      - INITIAL_ADMIN_PASSWORD=${INITIAL_ADMIN_PASSWORD:?INITIAL_ADMIN_PASSWORD is required}
+    volumes:
+      - file-storage:/app/storage
     depends_on:
       mongodb:
         condition: service_healthy
@@ -19,7 +22,7 @@ services:
   # ── MongoDB ──────────────────────────────────────────────────────────
   mongodb:
     image: mongo:7
-    container_name: document-comments-mongo
+    container_name: paperview-mongo
     restart: unless-stopped
     volumes:
       - mongo-data:/data/db
@@ -36,6 +39,7 @@ services:
 
 volumes:
   mongo-data:
+  file-storage:
 
 networks:
   app-network:
