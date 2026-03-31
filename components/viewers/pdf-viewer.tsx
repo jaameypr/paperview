@@ -90,6 +90,26 @@ const PdfViewer = forwardRef<PdfViewerHandle, PdfViewerProps>(
     const onPageChangeRef = useRef(onPageChange);
     onPageChangeRef.current = onPageChange;
 
+    // Suppress harmless "AbortException: TextLayer task cancelled" warnings
+    // from react-pdf's internal warning() package that fires via console.error
+    useEffect(() => {
+      const origError = console.error;
+      console.error = (...args: unknown[]) => {
+        if (
+          typeof args[0] === "string" &&
+          args[0].includes("AbortException") &&
+          args[0].includes("TextLayer")
+        ) return;
+        if (
+          args.length >= 2 &&
+          typeof args[1] === "string" &&
+          args[1].includes("AbortException")
+        ) return;
+        origError.apply(console, args);
+      };
+      return () => { console.error = origError; };
+    }, []);
+
     useImperativeHandle(ref, () => ({
       scrollToPage(page: number) {
         const el = scrollRef.current?.querySelector<HTMLElement>(
