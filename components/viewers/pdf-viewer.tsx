@@ -2,16 +2,16 @@
 
 import {
   useState,
-  useCallback,
   useEffect,
   useRef,
   forwardRef,
   useImperativeHandle,
+  memo,
 } from "react";
 import { Document, Page, pdfjs } from "react-pdf";
 import "react-pdf/dist/esm/Page/AnnotationLayer.css";
 import "react-pdf/dist/esm/Page/TextLayer.css";
-import type { Comment, SelectionData, SelectionEvent, HighlightRect } from "@/types/comment";
+import type { Comment, SelectionEvent, HighlightRect } from "@/types/comment";
 
 pdfjs.GlobalWorkerOptions.workerSrc = `//unpkg.com/pdfjs-dist@${pdfjs.version}/build/pdf.worker.min.mjs`;
 
@@ -23,7 +23,7 @@ interface PdfViewerProps {
   contentUrl: string;
   comments?: Comment[];
   activeCommentId?: string | null;
-  pendingSelection?: SelectionData | null;
+  pendingSelection?: import("@/types/comment").SelectionData | null;
   onPageChange?: (page: number) => void;
   onTotalPagesChange?: (total: number) => void;
   onSelection?: (event: SelectionEvent) => void;
@@ -36,9 +36,47 @@ function highlightColor(isActive: boolean, resolved: boolean): string {
   return "rgba(251,191,36,0.30)";
 }
 
+/**
+ * Memoized PDF page — only re-renders when pageNum or width changes.
+ * Prevents TextLayer abort errors when parent re-renders due to comment changes.
+ */
+const MemoPage = memo(function MemoPage({
+  pageNum,
+  width,
+}: {
+  pageNum: number;
+  width: number;
+}) {
+  return (
+    <Page
+      pageNumber={pageNum}
+      width={width}
+      renderTextLayer={true}
+      renderAnnotationLayer={true}
+      loading={
+        <div
+          className="bg-white dark:bg-gray-800 flex items-center justify-center"
+          style={{ height: Math.round(width * 1.414) }}
+        >
+          <div className="animate-spin w-5 h-5 border-2 border-blue-400 border-t-transparent rounded-full" />
+        </div>
+      }
+    />
+  );
+});
+
 const PdfViewer = forwardRef<PdfViewerHandle, PdfViewerProps>(
   function PdfViewer(
-    { contentUrl, comments = [], activeCommentId = null, pendingSelection = null, onPageChange, onTotalPagesChange, onSelection, onHighlightClick },
+    {
+      contentUrl,
+      comments = [],
+      activeCommentId = null,
+      pendingSelection = null,
+      onPageChange,
+      onTotalPagesChange,
+      onSelection,
+      onHighlightClick,
+    },
     ref
   ) {
     const [numPages, setNumPages] = useState(0);
@@ -54,16 +92,19 @@ const PdfViewer = forwardRef<PdfViewerHandle, PdfViewerProps>(
 
     useImperativeHandle(ref, () => ({
       scrollToPage(page: number) {
-        const el = scrollRef.current?.querySelector<HTMLElement>(`[data-page="${page}"]`);
+        const el = scrollRef.current?.querySelector<HTMLElement>(
+          `[data-page="${page}"]`
+        );
         if (el) el.scrollIntoView({ behavior: "smooth", block: "start" });
       },
     }));
 
-    // Responsive page width
+    // Responsive base width
     useEffect(() => {
       const container = scrollRef.current;
       if (!container) return;
-      const update = () => setBaseWidth(Math.min(container.clientWidth - 32, 820));
+      const update = () =>
+        setBaseWidth(Math.min(container.clientWidth - 32, 820));
       update();
       const ro = new ResizeObserver(update);
       ro.observe(container);
@@ -79,13 +120,19 @@ const PdfViewer = forwardRef<PdfViewerHandle, PdfViewerProps>(
       const observer = new IntersectionObserver(
         (entries) => {
           for (const entry of entries) {
-            const pn = parseInt((entry.target as HTMLElement).dataset.page ?? "1", 10);
+            const pn = parseInt(
+              (entry.target as HTMLElement).dataset.page ?? "1",
+              10
+            );
             pageVisibilitiesRef.current.set(pn, entry.intersectionRatio);
           }
           let best = 1;
           let bestRatio = -1;
           pageVisibilitiesRef.current.forEach((ratio, page) => {
-            if (ratio > bestRatio) { bestRatio = ratio; best = page; }
+            if (ratio > bestRatio) {
+              bestRatio = ratio;
+              best = page;
+            }
           });
           if (bestRatio > 0) {
             setCurrentPage(best);
@@ -108,7 +155,8 @@ const PdfViewer = forwardRef<PdfViewerHandle, PdfViewerProps>(
       function onMouseUp() {
         setTimeout(() => {
           const selection = window.getSelection();
-          if (!selection || selection.isCollapsed || !selection.rangeCount) return;
+          if (!selection || selection.isCollapsed || !selection.rangeCount)
+            return;
 
           const quote = selection.toString().trim();
           if (quote.length < 2) return;
@@ -122,31 +170,51 @@ const PdfViewer = forwardRef<PdfViewerHandle, PdfViewerProps>(
           const pageRectCache = new Map<HTMLElement, DOMRect>();
 
           const ancestor = range.commonAncestorContainer;
-          const walkRoot = ancestor.nodeType === Node.ELEMENT_NODE
-            ? (ancestor as HTMLElement)
-            : ancestor.parentElement;
+          const walkRoot =
+            ancestor.nodeType === Node.ELEMENT_NODE
+              ? (ancestor as HTMLElement)
+              : ancestor.parentElement;
           if (!walkRoot || !root.contains(walkRoot)) return;
 
-          const walker = document.createTreeWalker(walkRoot, NodeFilter.SHOW_TEXT);
+          const walker = document.createTreeWalker(
+            walkRoot,
+            NodeFilter.SHOW_TEXT
+          );
           let node: Node | null;
 
           while ((node = walker.nextNode())) {
             const textNode = node as Text;
             if (!range.intersectsNode(textNode)) continue;
-            if (!textNode.textContent || textNode.textContent.trim().length === 0) continue;
+            if (
+              !textNode.textContent ||
+              textNode.textContent.trim().length === 0
+            )
+              continue;
 
-            const pageEl = textNode.parentElement?.closest<HTMLElement>("[data-page]");
+            const pageEl =
+              textNode.parentElement?.closest<HTMLElement>("[data-page]");
             if (!pageEl || !root.contains(pageEl)) continue;
 
             const pageNum = parseInt(pageEl.dataset.page!, 10);
             if (isNaN(pageNum)) continue;
 
             const subRange = document.createRange();
-            subRange.setStart(textNode, range.startContainer === textNode ? range.startOffset : 0);
-            subRange.setEnd(textNode, range.endContainer === textNode ? range.endOffset : textNode.length);
+            subRange.setStart(
+              textNode,
+              range.startContainer === textNode ? range.startOffset : 0
+            );
+            subRange.setEnd(
+              textNode,
+              range.endContainer === textNode
+                ? range.endOffset
+                : textNode.length
+            );
 
             let pageRect = pageRectCache.get(pageEl);
-            if (!pageRect) { pageRect = pageEl.getBoundingClientRect(); pageRectCache.set(pageEl, pageRect); }
+            if (!pageRect) {
+              pageRect = pageEl.getBoundingClientRect();
+              pageRectCache.set(pageEl, pageRect);
+            }
 
             const rects = subRange.getClientRects();
             for (const cr of rects) {
@@ -192,12 +260,17 @@ const PdfViewer = forwardRef<PdfViewerHandle, PdfViewerProps>(
     }
 
     function scrollToPage(page: number) {
-      const el = scrollRef.current?.querySelector<HTMLElement>(`[data-page="${page}"]`);
+      const el = scrollRef.current?.querySelector<HTMLElement>(
+        `[data-page="${page}"]`
+      );
       if (el) el.scrollIntoView({ behavior: "smooth", block: "start" });
     }
 
     // Click handler for highlights
-    function handlePageClick(e: React.MouseEvent<HTMLDivElement>, pageNum: number) {
+    function handlePageClick(
+      e: React.MouseEvent<HTMLDivElement>,
+      pageNum: number
+    ) {
       if (!onHighlightClick) return;
       const pageEl = e.currentTarget;
       const pageRect = pageEl.getBoundingClientRect();
@@ -208,8 +281,14 @@ const PdfViewer = forwardRef<PdfViewerHandle, PdfViewerProps>(
         const target = comment.target;
         if (target.type !== "pdf" || !target.highlightRects?.length) continue;
         for (const rect of target.highlightRects) {
-          if ((rect.page ?? target.page) !== pageNum) continue;
-          if (x >= rect.x && x <= rect.x + rect.width && y >= rect.y && y <= rect.y + rect.height) {
+          const rectPage = rect.page ?? target.page;
+          if (rectPage !== pageNum) continue;
+          if (
+            x >= rect.x &&
+            x <= rect.x + rect.width &&
+            y >= rect.y &&
+            y <= rect.y + rect.height
+          ) {
             onHighlightClick(comment._id);
             return;
           }
@@ -232,21 +311,51 @@ const PdfViewer = forwardRef<PdfViewerHandle, PdfViewerProps>(
               value={currentPage}
               onChange={(e) => {
                 const p = parseInt(e.target.value, 10);
-                if (p >= 1 && p <= numPages) { setCurrentPage(p); scrollToPage(p); }
+                if (p >= 1 && p <= numPages) {
+                  setCurrentPage(p);
+                  scrollToPage(p);
+                }
               }}
               className="w-14 px-2 py-1 text-xs text-center border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-800 text-gray-900 dark:text-white"
             />
           </div>
           <div className="flex items-center gap-1">
-            <button onClick={() => setScale((s) => Math.max(0.5, +(s - 0.2).toFixed(1)))} className="px-2 py-1 text-sm text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 rounded transition-colors" title="Zoom out">−</button>
-            <span className="text-xs text-gray-500 dark:text-gray-400 w-12 text-center">{Math.round(scale * 100)}%</span>
-            <button onClick={() => setScale((s) => Math.min(3, +(s + 0.2).toFixed(1)))} className="px-2 py-1 text-sm text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 rounded transition-colors" title="Zoom in">+</button>
-            <button onClick={() => setScale(1.2)} className="px-2 py-1 text-xs text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 rounded transition-colors ml-1" title="Reset zoom">Reset</button>
+            <button
+              onClick={() =>
+                setScale((s) => Math.max(0.5, +(s - 0.2).toFixed(1)))
+              }
+              className="px-2 py-1 text-sm text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 rounded transition-colors"
+              title="Zoom out"
+            >
+              −
+            </button>
+            <span className="text-xs text-gray-500 dark:text-gray-400 w-12 text-center">
+              {Math.round(scale * 100)}%
+            </span>
+            <button
+              onClick={() =>
+                setScale((s) => Math.min(3, +(s + 0.2).toFixed(1)))
+              }
+              className="px-2 py-1 text-sm text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 rounded transition-colors"
+              title="Zoom in"
+            >
+              +
+            </button>
+            <button
+              onClick={() => setScale(1.2)}
+              className="px-2 py-1 text-xs text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 rounded transition-colors ml-1"
+              title="Reset zoom"
+            >
+              Reset
+            </button>
           </div>
         </div>
 
         {/* Pages */}
-        <div ref={scrollRef} className="flex-1 overflow-y-auto bg-gray-200 dark:bg-gray-950">
+        <div
+          ref={scrollRef}
+          className="flex-1 overflow-y-auto bg-gray-200 dark:bg-gray-950"
+        >
           <Document
             file={contentUrl}
             onLoadSuccess={onDocumentLoadSuccess}
@@ -262,89 +371,102 @@ const PdfViewer = forwardRef<PdfViewerHandle, PdfViewerProps>(
             }
           >
             <div className="flex flex-col items-center py-4 gap-4">
-              {Array.from({ length: numPages }, (_, i) => i + 1).map((pageNum) => {
-                // Collect highlights for this page
-                const pageHighlights: { commentId: string; rects: HighlightRect[]; resolved: boolean }[] = [];
-                for (const c of comments) {
-                  if (c.target.type !== "pdf" || !c.target.highlightRects?.length) continue;
-                  const rects = c.target.highlightRects.filter((r) => {
-                    const rp = r.page ?? c.target.type === "pdf" ? (c.target as { page: number }).page : 0;
-                    if (rp !== pageNum) return false;
-                    if (r.width <= 0 || r.height <= 0) return false;
-                    if (r.width > 95 && r.height > 40) return false;
-                    return true;
-                  });
-                  if (rects.length > 0) pageHighlights.push({ commentId: c._id, rects, resolved: c.resolved });
-                }
+              {Array.from({ length: numPages }, (_, i) => i + 1).map(
+                (pageNum) => {
+                  // Collect highlights for this page
+                  const pageHighlights: {
+                    commentId: string;
+                    rects: HighlightRect[];
+                    resolved: boolean;
+                  }[] = [];
+                  for (const c of comments) {
+                    if (
+                      c.target.type !== "pdf" ||
+                      !c.target.highlightRects?.length
+                    )
+                      continue;
+                    const rects = c.target.highlightRects.filter((r) => {
+                      const rectPage =
+                        r.page ?? (c.target.type === "pdf" ? c.target.page : 0);
+                      if (rectPage !== pageNum) return false;
+                      if (r.width <= 0 || r.height <= 0) return false;
+                      if (r.width > 95 && r.height > 40) return false;
+                      return true;
+                    });
+                    if (rects.length > 0)
+                      pageHighlights.push({
+                        commentId: c._id,
+                        rects,
+                        resolved: c.resolved,
+                      });
+                  }
 
-                const pendingRects = pendingSelection?.highlightRects?.filter(
-                  (r) => r.page === pageNum && r.width > 0 && r.height > 0
-                ) ?? [];
+                  const pendingRects =
+                    pendingSelection?.highlightRects?.filter(
+                      (r) =>
+                        r.page === pageNum && r.width > 0 && r.height > 0
+                    ) ?? [];
 
-                return (
-                  <div
-                    key={`${pageNum}-${scale}`}
-                    data-page={pageNum}
-                    className="relative mx-auto bg-white shadow-lg cursor-default"
-                    style={{ width: pageWidth }}
-                    onClick={(e) => handlePageClick(e, pageNum)}
-                  >
-                    <Page
-                      pageNumber={pageNum}
-                      width={pageWidth}
-                      renderTextLayer={true}
-                      renderAnnotationLayer={true}
-                      loading={
-                        <div className="bg-white dark:bg-gray-800 flex items-center justify-center" style={{ height: Math.round(pageWidth * 1.414) }}>
-                          <div className="animate-spin w-5 h-5 border-2 border-blue-400 border-t-transparent rounded-full" />
+                  return (
+                    <div
+                      key={pageNum}
+                      data-page={pageNum}
+                      className="relative mx-auto bg-white shadow-lg cursor-default"
+                      style={{ width: pageWidth }}
+                      onClick={(e) => handlePageClick(e, pageNum)}
+                    >
+                      {/* Memoized — won't re-render when comments change */}
+                      <MemoPage pageNum={pageNum} width={pageWidth} />
+
+                      {/* Highlight overlays */}
+                      {pageHighlights.length > 0 && (
+                        <div className="absolute inset-0 pointer-events-none overflow-hidden">
+                          {pageHighlights.map(
+                            ({ commentId, rects, resolved }) =>
+                              rects.map((rect, ri) => (
+                                <div
+                                  key={`${commentId}-${ri}`}
+                                  className="absolute transition-colors duration-150"
+                                  style={{
+                                    left: `${rect.x}%`,
+                                    top: `${rect.y}%`,
+                                    width: `${rect.width}%`,
+                                    height: `${rect.height}%`,
+                                    backgroundColor: highlightColor(
+                                      commentId === activeCommentId,
+                                      resolved
+                                    ),
+                                    mixBlendMode: "multiply",
+                                  }}
+                                />
+                              ))
+                          )}
                         </div>
-                      }
-                    />
+                      )}
 
-                    {/* Highlight overlays */}
-                    {pageHighlights.length > 0 && (
-                      <div className="absolute inset-0 pointer-events-none overflow-hidden">
-                        {pageHighlights.map(({ commentId, rects, resolved }) =>
-                          rects.map((rect, ri) => (
+                      {/* Pending selection overlay */}
+                      {pendingRects.length > 0 && (
+                        <div className="absolute inset-0 pointer-events-none overflow-hidden">
+                          {pendingRects.map((rect, ri) => (
                             <div
-                              key={`${commentId}-${ri}`}
-                              className="absolute transition-colors duration-150"
+                              key={`pending-${ri}`}
+                              className="absolute"
                               style={{
                                 left: `${rect.x}%`,
                                 top: `${rect.y}%`,
                                 width: `${rect.width}%`,
                                 height: `${rect.height}%`,
-                                backgroundColor: highlightColor(commentId === activeCommentId, resolved),
+                                backgroundColor: "rgba(59,130,246,0.35)",
                                 mixBlendMode: "multiply",
                               }}
                             />
-                          ))
-                        )}
-                      </div>
-                    )}
-
-                    {/* Pending selection overlay */}
-                    {pendingRects.length > 0 && (
-                      <div className="absolute inset-0 pointer-events-none overflow-hidden">
-                        {pendingRects.map((rect, ri) => (
-                          <div
-                            key={`pending-${ri}`}
-                            className="absolute"
-                            style={{
-                              left: `${rect.x}%`,
-                              top: `${rect.y}%`,
-                              width: `${rect.width}%`,
-                              height: `${rect.height}%`,
-                              backgroundColor: "rgba(59,130,246,0.35)",
-                              mixBlendMode: "multiply",
-                            }}
-                          />
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                );
-              })}
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  );
+                }
+              )}
             </div>
           </Document>
         </div>
