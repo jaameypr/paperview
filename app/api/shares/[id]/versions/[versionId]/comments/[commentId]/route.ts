@@ -15,7 +15,6 @@ export async function PATCH(
     const { id, versionId, commentId } = await params;
     const cookieStore = await cookies();
     const auth = getAuthFromCookie(cookieStore.get(COOKIE_NAME)?.value);
-    if (!auth) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
     await connectToDatabase();
     const share = await Share.findById(id);
@@ -58,7 +57,6 @@ export async function DELETE(
     const { id, versionId, commentId } = await params;
     const cookieStore = await cookies();
     const auth = getAuthFromCookie(cookieStore.get(COOKIE_NAME)?.value);
-    if (!auth) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
     await connectToDatabase();
     const share = await Share.findById(id);
