@@ -7,7 +7,7 @@ services:
     ports:
       - "7070:3000"
     environment:
-      - MONGODB_URI=mongodb://mongodb:27017/paperview
+      - MONGODB_URI=mongodb://${MONGO_USERNAME:-paperview}:${MONGO_PASSWORD}@mongodb:27017/paperview?authSource=admin
       - AUTH_SECRET=${AUTH_SECRET:?AUTH_SECRET is required}
       - INITIAL_ADMIN_USERNAME=${INITIAL_ADMIN_USERNAME:-admin}
       - INITIAL_ADMIN_PASSWORD=${INITIAL_ADMIN_PASSWORD:?INITIAL_ADMIN_PASSWORD is required}
@@ -24,12 +24,13 @@ services:
     image: mongo:7
     container_name: paperview-mongo
     restart: unless-stopped
+    environment:
+      - MONGO_INITDB_ROOT_USERNAME=${MONGO_USERNAME:-paperview}
+      - MONGO_INITDB_ROOT_PASSWORD=${MONGO_PASSWORD:?MONGO_PASSWORD is required}
     volumes:
       - mongo-data:/data/db
-    ports:
-      - "27018:27017"
     healthcheck:
-      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
+      test: ["CMD", "mongosh", "-u", "${MONGO_USERNAME:-paperview}", "-p", "${MONGO_PASSWORD}", "--authenticationDatabase", "admin", "--eval", "db.adminCommand('ping')"]
       interval: 10s
       timeout: 5s
       retries: 5
