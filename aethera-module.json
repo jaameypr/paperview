@@ -9,7 +9,11 @@
   "minAetheraVersion": "0.2.0",
 
   "docker": {
-    "image": "ghcr.io/pruefertit/paperview:latest",
+    "build": {
+      "repository": "https://github.com/jaameypr/paperview.git",
+      "context": ".",
+      "dockerfile": "Dockerfile"
+    },
     "port": 3000,
     "healthCheck": "/api/health",
     "volumes": {
