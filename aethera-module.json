@@ -6,6 +6,7 @@
   "author": "pruefertit",
   "icon": "file-text",
   "type": "docker",
+  "exposure": "public",
   "minAetheraVersion": "0.2.0",
 
   "docker": {
