@@ -77,3 +77,39 @@ export function getFilePath(storageKey: string): string {
   assertSafePath(filePath);
   return filePath;
 }
+
+/** Get the temp directory for chunked uploads */
+export function getChunkDir(): string {
+  return path.join(STORAGE_DIR, "_chunks");
+}
+
+/**
+ * Adopt a temp file (e.g. from chunked upload) into permanent storage.
+ * Computes SHA-256 checksum via streaming — safe for multi-GB files.
+ */
+export async function saveFileFromPath(
+  tempPath: string,
+  originalFilename: string,
+): Promise<{ storageKey: string; checksum: string; size: number }> {
+  await ensureStorageDir();
+
+  const ext = path.extname(originalFilename);
+  const storageKey = `${uuidv4()}${ext}`;
+  const destPath = path.join(STORAGE_DIR, storageKey);
+  assertSafePath(destPath);
+
+  // Stream checksum (no full-file buffering)
+  const { createReadStream } = await import("fs");
+  const checksum = await new Promise<string>((resolve, reject) => {
+    const hash = crypto.createHash("sha256");
+    const stream = createReadStream(tempPath);
+    stream.on("data", (chunk) => hash.update(chunk));
+    stream.on("end", () => resolve(hash.digest("hex")));
+    stream.on("error", reject);
+  });
+
+  const stats = await fs.stat(tempPath);
+  await fs.rename(tempPath, destPath);
+
+  return { storageKey, checksum, size: stats.size };
+}

@@ -2,13 +2,15 @@ import { NextRequest, NextResponse } from "next/server";
 import { connectToDatabase } from "@/lib/mongodb";
 import { hashSharePassword } from "@/lib/auth";
 import { getRequestAuth } from "@/lib/apiAuth";
-import { saveFile } from "@/lib/storage";
+import { saveFile, saveFileFromPath, getChunkDir } from "@/lib/storage";
 import Share from "@/models/Share";
 import ShareVersion from "@/models/ShareVersion";
 import ShareCollaborator from "@/models/ShareCollaborator";
 import User from "@/models/User";
 import { getKindFromExtension } from "@/types/share";
 import { bootstrapAdmin } from "@/lib/bootstrap";
+import fs from "fs/promises";
+import path from "path";
 
 export async function GET(request: NextRequest) {
   try {
@@ -67,25 +69,18 @@ export async function POST(request: NextRequest) {
 
     await connectToDatabase();
 
-    const formData = await request.formData();
-    const file = formData.get("file") as File | null;
-    const title = formData.get("title") as string | null;
-    const description = (formData.get("description") as string) ?? "";
-    const visibility = (formData.get("visibility") as string) ?? "private";
-    const password = formData.get("password") as string | null;
-    const expiresAt = formData.get("expiresAt") as string | null;
-    const commentsEnabled = formData.get("commentsEnabled") !== "false";
-    const previewMode = (formData.get("previewMode") as string) ?? "viewer_comments";
-    const downloadEnabled = formData.get("downloadEnabled") !== "false";
-    const changeNote = (formData.get("changeNote") as string) ?? "";
+    const ct = request.headers.get("content-type") ?? "";
+    const isJson = ct.includes("application/json");
 
-    if (!title || !title.trim()) {
-      return NextResponse.json({ error: "Title is required" }, { status: 400 });
-    }
-
-    // Support either file upload or pasted text content
-    const textContent = formData.get("content") as string | null;
-    const textFilename = formData.get("filename") as string | null;
+    let title: string | null = null;
+    let description = "";
+    let visibility = "private";
+    let password: string | null = null;
+    let expiresAt: string | null = null;
+    let commentsEnabled = true;
+    let previewMode = "viewer_comments";
+    let downloadEnabled = true;
+    let changeNote = "";
 
     let kind: ReturnType<typeof getKindFromExtension>;
     let storageKey: string;
@@ -94,26 +89,88 @@ export async function POST(request: NextRequest) {
     let contentType: string;
     let originalFilename: string;
 
-    if (file) {
-      if (file.size > 200 * 1024 * 1024) {
-        return NextResponse.json({ error: "File too large (max 200 MB)" }, { status: 413 });
+    if (isJson) {
+      // Chunked upload finalization — file already assembled via /api/upload/chunk
+      const body = await request.json();
+      const { uploadId, filename } = body;
+
+      if (!uploadId || !filename) {
+        return NextResponse.json(
+          { error: "uploadId and filename are required" },
+          { status: 400 },
+        );
       }
-      kind = getKindFromExtension(file.name);
-      const buffer = Buffer.from(await file.arrayBuffer());
-      ({ storageKey, checksum, size } = await saveFile(buffer, file.name));
-      contentType = file.type || "application/octet-stream";
-      originalFilename = file.name;
-    } else if (textContent !== null && textFilename) {
-      if (Buffer.byteLength(textContent, "utf-8") > 10 * 1024 * 1024) {
-        return NextResponse.json({ error: "Content too large (max 10 MB)" }, { status: 413 });
+
+      title = body.title ?? null;
+      description = body.description ?? "";
+      visibility = body.visibility ?? "private";
+      password = body.password ?? null;
+      expiresAt = body.expiresAt ?? null;
+      commentsEnabled = body.commentsEnabled !== false;
+      previewMode = body.previewMode ?? "viewer_comments";
+      downloadEnabled = body.downloadEnabled !== false;
+      changeNote = body.changeNote ?? "";
+
+      if (!title || !title.trim()) {
+        return NextResponse.json({ error: "Title is required" }, { status: 400 });
       }
-      kind = getKindFromExtension(textFilename);
-      const buffer = Buffer.from(textContent, "utf-8");
-      ({ storageKey, checksum, size } = await saveFile(buffer, textFilename));
-      contentType = "text/plain; charset=utf-8";
-      originalFilename = textFilename;
+
+      const tempPath = path.join(getChunkDir(), `${uploadId}.tmp`);
+      try {
+        await fs.access(tempPath);
+      } catch {
+        return NextResponse.json(
+          { error: "Upload not found — chunks may have expired" },
+          { status: 404 },
+        );
+      }
+
+      kind = getKindFromExtension(filename);
+      ({ storageKey, checksum, size } = await saveFileFromPath(tempPath, filename));
+      contentType = "application/octet-stream";
+      originalFilename = filename;
     } else {
-      return NextResponse.json({ error: "Either a file or text content with filename is required" }, { status: 400 });
+      // Legacy FormData upload (small files)
+      const formData = await request.formData();
+      const file = formData.get("file") as File | null;
+      title = formData.get("title") as string | null;
+      description = (formData.get("description") as string) ?? "";
+      visibility = (formData.get("visibility") as string) ?? "private";
+      password = formData.get("password") as string | null;
+      expiresAt = formData.get("expiresAt") as string | null;
+      commentsEnabled = formData.get("commentsEnabled") !== "false";
+      previewMode = (formData.get("previewMode") as string) ?? "viewer_comments";
+      downloadEnabled = formData.get("downloadEnabled") !== "false";
+      changeNote = (formData.get("changeNote") as string) ?? "";
+
+      if (!title || !title.trim()) {
+        return NextResponse.json({ error: "Title is required" }, { status: 400 });
+      }
+
+      const textContent = formData.get("content") as string | null;
+      const textFilename = formData.get("filename") as string | null;
+
+      if (file) {
+        if (file.size > 200 * 1024 * 1024) {
+          return NextResponse.json({ error: "File too large (max 200 MB)" }, { status: 413 });
+        }
+        kind = getKindFromExtension(file.name);
+        const buffer = Buffer.from(await file.arrayBuffer());
+        ({ storageKey, checksum, size } = await saveFile(buffer, file.name));
+        contentType = file.type || "application/octet-stream";
+        originalFilename = file.name;
+      } else if (textContent !== null && textFilename) {
+        if (Buffer.byteLength(textContent, "utf-8") > 10 * 1024 * 1024) {
+          return NextResponse.json({ error: "Content too large (max 10 MB)" }, { status: 413 });
+        }
+        kind = getKindFromExtension(textFilename);
+        const buffer = Buffer.from(textContent, "utf-8");
+        ({ storageKey, checksum, size } = await saveFile(buffer, textFilename));
+        contentType = "text/plain; charset=utf-8";
+        originalFilename = textFilename;
+      } else {
+        return NextResponse.json({ error: "Either a file or text content with filename is required" }, { status: 400 });
+      }
     }
 
     const passwordHash = password && password.trim()
