@@ -1,12 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
 import { cookies } from "next/headers";
-import { readFile as readFileFromDisk } from "fs/promises";
+import { createReadStream } from "fs";
+import { stat } from "fs/promises";
 import { connectToDatabase } from "@/lib/mongodb";
 import { getRequestAuth } from "@/lib/apiAuth";
 import { getAccessLevel, hasAccess, isExpired } from "@/lib/access";
 import { getFilePath } from "@/lib/storage";
 import Share from "@/models/Share";
 import ShareVersion from "@/models/ShareVersion";
+import { Readable } from "stream";
 
 export async function GET(
   request: NextRequest,
@@ -41,13 +43,17 @@ export async function GET(
     }
 
     const filePath = getFilePath(version.storageKey);
-    const buffer = await readFileFromDisk(filePath);
+    const fileStats = await stat(filePath);
 
-    return new NextResponse(buffer, {
+    // Stream the file instead of buffering it entirely in memory
+    const nodeStream = createReadStream(filePath);
+    const webStream = Readable.toWeb(nodeStream) as ReadableStream;
+
+    return new NextResponse(webStream, {
       headers: {
         "Content-Type": version.contentType,
         "Content-Disposition": `attachment; filename="${encodeURIComponent(version.originalFilename)}"`,
-        "Content-Length": String(version.fileSize),
+        "Content-Length": String(fileStats.size),
         "X-Content-Type-Options": "nosniff",
       },
     });
