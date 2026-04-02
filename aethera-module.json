@@ -1,0 +1,71 @@
+{
+  "id": "paperview",
+  "name": "Paperview",
+  "version": "1.0.0",
+  "description": "Self-hosted file hosting & document collaboration",
+  "author": "pruefertit",
+  "icon": "file-text",
+  "type": "docker",
+  "minAetheraVersion": "0.2.0",
+
+  "docker": {
+    "image": "ghcr.io/pruefertit/paperview:latest",
+    "port": 3000,
+    "healthCheck": "/api/health",
+    "volumes": {
+      "storage": "/app/storage"
+    },
+    "resources": {
+      "memoryLimit": "512m"
+    }
+  },
+
+  "auth": {
+    "strategy": "api_key",
+    "exchangePath": "/api/auth/api-keys/exchange"
+  },
+
+  "database": {
+    "type": "mongodb",
+    "name": "aethera_mod_paperview"
+  },
+
+  "sidebar": {
+    "section": "Module",
+    "items": [
+      {
+        "label": "Paperview",
+        "icon": "file-text",
+        "description": "Dateien & Dokumente"
+      }
+    ]
+  },
+
+  "env": {
+    "auto": [
+      "MONGODB_URI",
+      "AUTH_SECRET"
+    ],
+    "configurable": [
+      {
+        "key": "INITIAL_ADMIN_USERNAME",
+        "label": "Initial Admin Username",
+        "default": "admin",
+        "required": false
+      },
+      {
+        "key": "INITIAL_ADMIN_PASSWORD",
+        "label": "Initial Admin Password",
+        "default": "",
+        "required": false,
+        "secret": true
+      }
+    ]
+  },
+
+  "permissions": [
+    { "name": "module.paperview.*", "description": "Vollzugriff auf Paperview" },
+    { "name": "module.paperview.access", "description": "Paperview öffnen" },
+    { "name": "module.paperview.admin", "description": "Paperview administrieren" }
+  ]
+}
