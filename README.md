@@ -307,6 +307,62 @@ docker compose logs -f mongodb
 
 ---
 
+## Reverse Proxy / Tunnel Deployment
+
+Paperview works behind Cloudflare Tunnel, Nginx, Traefik, Caddy, or any reverse proxy.
+
+### Requirements
+
+Your proxy must forward these headers to the Next.js container:
+
+| Header | Value | Example |
+|--------|-------|---------|
+| `Host` | The public hostname | `shareables.example.com` |
+| `X-Forwarded-Proto` | `https` | `https` |
+| `X-Forwarded-For` | Client IP | `203.0.113.42` |
+
+### Cloudflare Tunnel
+
+Cloudflare Tunnel forwards these headers automatically. Just point the tunnel to your Docker host:
+
+```yaml
+# ~/.cloudflared/config.yml
+ingress:
+  - hostname: shareables.example.com
+    service: http://localhost:7070
+  - service: http_status:404
+```
+
+No extra environment variables are needed — `next.config.ts` includes `experimental.trustHostHeader: true` which tells Next.js to use the forwarded Host header for URL construction and routing. The Dockerfile patches this flag into the standalone build (Next.js hardcodes it to `false` for non-Vercel deployments).
+
+### Nginx
+
+```nginx
+server {
+    listen 443 ssl;
+    server_name shareables.example.com;
+
+    location / {
+        proxy_pass http://localhost:7070;
+        proxy_http_version 1.1;
+        proxy_set_header Host              $host;
+        proxy_set_header X-Real-IP         $remote_addr;
+        proxy_set_header X-Forwarded-For   $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header Upgrade           $http_upgrade;
+        proxy_set_header Connection        "upgrade";
+    }
+}
+```
+
+### Important notes
+
+- `HOSTNAME=0.0.0.0` in the Dockerfile is the **bind address** only. With `trustHostHeader` enabled, the proxy's `Host` header is used for URL construction — not `HOSTNAME`.
+- Auth cookies use `secure: true` in production (`NODE_ENV=production`), so HTTPS is required for login to work behind a proxy.
+- The proxy (middleware) reads `X-Forwarded-Host` and `X-Forwarded-Proto` to build correct redirect URLs.
+
+---
+
 ## Note on Next.js 16
 
 This project uses Next.js 16: `proxy.ts` instead of `middleware.ts`, async `cookies()`, route params as `Promise`. Compatible with Next.js 15.3+.

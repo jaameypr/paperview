@@ -91,6 +91,20 @@ async function verifyToken(token: string, secret: string): Promise<TokenPayload 
   }
 }
 
+/**
+ * Build an absolute URL using the public origin as seen by the reverse proxy.
+ * Falls back to request.url when no forwarded headers are present (local dev).
+ */
+function buildPublicUrl(path: string, request: NextRequest): URL {
+  const forwardedHost = request.headers.get("x-forwarded-host") || request.headers.get("host");
+  const forwardedProto = request.headers.get("x-forwarded-proto") || "http";
+
+  if (forwardedHost) {
+    return new URL(path, `${forwardedProto}://${forwardedHost}`);
+  }
+  return new URL(path, request.url);
+}
+
 export async function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
@@ -113,7 +127,7 @@ export async function proxy(request: NextRequest) {
     if (pathname.startsWith("/api/")) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
-    const loginUrl = new URL("/login", request.url);
+    const loginUrl = buildPublicUrl("/login", request);
     loginUrl.searchParams.set("redirect", pathname);
     return NextResponse.redirect(loginUrl);
   }
@@ -123,7 +137,7 @@ export async function proxy(request: NextRequest) {
     if (pathname.startsWith("/api/")) {
       return NextResponse.json({ error: "Password change required" }, { status: 403 });
     }
-    return NextResponse.redirect(new URL("/change-password", request.url));
+    return NextResponse.redirect(buildPublicUrl("/change-password", request));
   }
 
   return NextResponse.next();
