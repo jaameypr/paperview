@@ -56,6 +56,28 @@ export default function ShareDetailPage() {
   const pdfViewerRef = useRef<PdfViewerHandle>(null);
   const contentAreaRef = useRef<HTMLDivElement>(null);
 
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+
+  async function handleDelete() {
+    setDeleting(true);
+    try {
+      const res = await fetch(`/api/shares/${shareId}`, { method: "DELETE" });
+      if (res.ok) {
+        router.push("/dashboard");
+      } else {
+        const d = await res.json();
+        alert(d.error ?? "Delete failed");
+        setDeleting(false);
+        setShowDeleteConfirm(false);
+      }
+    } catch {
+      alert("Delete failed");
+      setDeleting(false);
+      setShowDeleteConfirm(false);
+    }
+  }
+
   // Password prompt state
   const [passwordRequired, setPasswordRequired] = useState(false);
   const [passwordTitle, setPasswordTitle] = useState("");
@@ -333,6 +355,18 @@ export default function ShareDetailPage() {
               )}
               {isOwner && (
                 <button
+                  onClick={() => setShowDeleteConfirm(true)}
+                  className="px-3 py-1.5 text-xs rounded-lg font-medium transition-colors flex items-center gap-1.5 bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400 hover:bg-red-200 dark:hover:bg-red-900/50"
+                  title="Delete share"
+                >
+                  <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                  </svg>
+                  Delete
+                </button>
+              )}
+              {isOwner && (
+                <button
                   onClick={() => setShowShareModal(true)}
                   className={`px-3 py-1.5 text-xs rounded-lg font-medium transition-colors flex items-center gap-1.5 ${
                     share.visibility !== "private"
@@ -508,6 +542,35 @@ export default function ShareDetailPage() {
         shareId={shareId}
         onUploaded={() => { fetchShare(); }}
       />
+
+      {/* Delete confirmation dialog */}
+      {showDeleteConfirm && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+          <div className="bg-white dark:bg-gray-900 rounded-xl shadow-xl p-6 w-full max-w-sm mx-4">
+            <h2 className="text-base font-semibold text-gray-900 dark:text-white mb-2">Share löschen?</h2>
+            <p className="text-sm text-gray-500 dark:text-gray-400 mb-6">
+              <strong className="text-gray-700 dark:text-gray-200">{share?.title}</strong> wird unwiderruflich gelöscht –
+              inklusive aller Versionen, Dateien und Kommentare.
+            </p>
+            <div className="flex justify-end gap-2">
+              <button
+                onClick={() => setShowDeleteConfirm(false)}
+                disabled={deleting}
+                className="px-4 py-2 text-sm rounded-lg bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors"
+              >
+                Abbrechen
+              </button>
+              <button
+                onClick={handleDelete}
+                disabled={deleting}
+                className="px-4 py-2 text-sm rounded-lg bg-red-600 text-white hover:bg-red-700 transition-colors disabled:opacity-60"
+              >
+                {deleting ? "Lösche…" : "Endgültig löschen"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </AppShell>
   );
 }
