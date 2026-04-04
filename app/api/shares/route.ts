@@ -115,15 +115,39 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ error: "Title is required" }, { status: 400 });
       }
 
-      const tempPath = path.join(getChunkDir(), `${uploadId}.tmp`);
+      const uploadDir = path.join(getChunkDir(), uploadId);
       try {
-        await fs.access(tempPath);
+        await fs.access(uploadDir);
       } catch {
         return NextResponse.json(
           { error: "Upload not found — chunks may have expired" },
           { status: 404 },
         );
       }
+
+      // Reassemble chunks in order into a single .tmp file
+      const chunkFiles = (await fs.readdir(uploadDir))
+        .filter((f) => f.endsWith(".chunk"))
+        .sort((a, b) => parseInt(a) - parseInt(b));
+
+      if (chunkFiles.length === 0) {
+        return NextResponse.json({ error: "No chunks found for this upload" }, { status: 404 });
+      }
+
+      const tempPath = path.join(getChunkDir(), `${uploadId}.tmp`);
+      const out = await fs.open(tempPath, "w");
+      try {
+        for (const chunkFile of chunkFiles) {
+          const chunkPath = path.join(uploadDir, chunkFile);
+          const data = await fs.readFile(chunkPath);
+          await out.write(data);
+        }
+      } finally {
+        await out.close();
+      }
+
+      // Clean up chunk directory
+      await fs.rm(uploadDir, { recursive: true, force: true });
 
       kind = getKindFromExtension(filename);
       ({ storageKey, checksum, size } = await saveFileFromPath(tempPath, filename));

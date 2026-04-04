@@ -5,9 +5,13 @@ import fs from "fs/promises";
 import path from "path";
 
 /**
- * Chunked upload endpoint — receives individual chunks and appends to temp file.
+ * Chunked upload endpoint — each chunk is saved as an individual file
+ * so parallel uploads are race-condition-free.
+ *
  * Headers: X-Upload-Id (UUID), X-Chunk-Index (0-based)
  * Body: raw binary chunk (application/octet-stream)
+ *
+ * Chunk files: {chunkDir}/{uploadId}/{chunkIndex}.chunk
  */
 export async function POST(request: NextRequest) {
   try {
@@ -25,10 +29,7 @@ export async function POST(request: NextRequest) {
 
     const chunkIndex = Number(chunkIndexStr ?? -1);
     if (!Number.isInteger(chunkIndex) || chunkIndex < 0) {
-      return NextResponse.json(
-        { error: "Invalid Chunk-Index" },
-        { status: 400 },
-      );
+      return NextResponse.json({ error: "Invalid Chunk-Index" }, { status: 400 });
     }
 
     const body = request.body;
@@ -36,12 +37,12 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Empty body" }, { status: 400 });
     }
 
-    const chunkDir = getChunkDir();
-    await fs.mkdir(chunkDir, { recursive: true });
+    // Each upload gets its own subdirectory — no shared file, no races
+    const uploadDir = path.join(getChunkDir(), uploadId);
+    await fs.mkdir(uploadDir, { recursive: true });
 
-    const tempPath = path.join(chunkDir, `${uploadId}.tmp`);
+    const chunkPath = path.join(uploadDir, `${chunkIndex}.chunk`);
 
-    // Convert ReadableStream to Buffer
     const reader = body.getReader();
     const chunks: Uint8Array[] = [];
     while (true) {
@@ -51,18 +52,11 @@ export async function POST(request: NextRequest) {
     }
     const buf = Buffer.concat(chunks);
 
-    if (chunkIndex === 0) {
-      await fs.writeFile(tempPath, buf);
-    } else {
-      await fs.appendFile(tempPath, buf);
-    }
+    await fs.writeFile(chunkPath, buf);
 
     return NextResponse.json({ ok: true, chunkIndex });
   } catch (err) {
     console.error("[POST /api/upload/chunk]", err);
-    return NextResponse.json(
-      { error: "Internal server error" },
-      { status: 500 },
-    );
+    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
 }
